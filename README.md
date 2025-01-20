@@ -67,7 +67,7 @@ model.print_components()
 ## API Reference
 
 ### heavi.Model
-The `Model` class is the central interface for building and simulating circuits.
+The `Model` class is the central interface for building and simulating circuits. It inherits from the `Network` class and has additional libraries for component creation.
 
 #### **Initialization**
 ```python
@@ -78,18 +78,13 @@ Model(default_name: str = "Node", filter_library: Filtering = Filtering, compone
 - **`component_library`**: Library for circuit components.
 
 #### **Key Methods**
+Most of the methods mentioned below are defined as `Network` methods.
 
 - **`node(name: str = None) -> Node`**
   Creates a new circuit node.
 
 - **`terminal(signal_node: Node, Z0: float, gnd_node: Node = None) -> Terminal`**
   Adds a terminal to the circuit with a specified impedance.
-
-- **`run_sparameter_analysis(frequencies: np.ndarray) -> Sparameters`**
-  Runs S-parameter analysis for the specified frequency range.
-
-- **`print_components()`**
-  Displays an overview of all components in the circuit.
 
 - **`resistor(node1: Node, node2: Node, R: float) -> Component`**
   Adds a resistor between two nodes.
@@ -103,6 +98,8 @@ Model(default_name: str = "Node", filter_library: Filtering = Filtering, compone
 - **`transmissionline(gnd: Node, port1: Node, port2: Node, Z0: float, er: float, L: float) -> Component`**
   Adds a transmission line with specified properties.
 
+- **`run_sparameter_analysis(frequencies: np.ndarray) -> Sparameters`**
+  Runs S-parameter analysis for the specified frequency range.
 ---
 
 ### heavi.Network
@@ -114,44 +111,10 @@ Network(default_name: str = 'Node')
 ```
 - **`default_name`**: Default prefix for node names.
 
-#### **Key Methods**
-
-- **`named_node(prefix: str) -> Node`**
-  Adds a named node to the network.
-
-- **`mnodes(N: int, name: str = None) -> list[Node]`**
-  Creates multiple nodes with a shared prefix.
-
-- **`admittance(node1: Node, node2: Node, Y: float) -> Component`**
-  Adds an admittance component between two nodes.
-
-- **`impedance(node1: Node, node2: Node, Z: float, component_type: ComponentType = ComponentType.IMPEDANCE) -> Component`**
-  Adds an impedance component between two nodes.
-
-- **`random_two_port(gnd: Node, port1: Node, port2: Node, VSWR: float, Loss: float, Z0: float) -> Component`**
-  Generates a stochastic two-port network.
-
-- **`random_power_splitter(gnd: Node, pin: Node, pouts: list[Node], port_VSWR: float = 1, transmission_loss: float = 0, Z0: float = 50.0) -> Component`**
-  Creates a multi-port power splitter with randomized parameters.
-
----
-
-### heavi.rfcircuit.Z0_VSWR
-```python
-Z0_VSWR(Z0: float, max_vswr: float) -> float
-```
-Generates a random real impedance for a given reference impedance `Z0` and maximum VSWR.
-
-#### Parameters:
-- **`Z0`**: Reference impedance in ohms.
-- **`max_vswr`**: Maximum Voltage Standing Wave Ratio.
-
-#### Returns:
-- **`float`**: Random impedance.
-
 ---
 
 ### heavi.plot_s_parameters
+The `plot_s_parameters` plot function uses `matplotlib` and offers a convenient means of displaying S-parameters.
 ```python
 plot_s_parameters(frequencies: np.ndarray, S_parameters: list[np.ndarray], labels: list[str], linestyles: list[str], colorcycle: list[int])
 ```
@@ -166,22 +129,24 @@ Plots S-parameter data.
 
 ---
 
-### heavi.rfcircuit.Component
-The `Component` class represents an individual circuit element, such as a resistor or capacitor.
-
-#### **Attributes**
-- **`nodes`**: List of connected nodes.
-- **`type`**: Type of the component (e.g., resistor, capacitor).
-- **`display_value`**: Displayed value of the component.
-
----
-
 ### heavi.sparam.Sparameters
-The `Sparameters` class encapsulates the results of S-parameter analysis.
+The `Sparameters` class encapsulates the results of S-parameter analysis and mostly just contains the S-parameters as a 3-dimensional numpy array with the first two dimensions being the S-parameter matrix and the last the frequency axis.
 
 #### **Attributes**
 - **`S`**: S-parameter matrix.
 - **`frequencies`**: Frequency range associated with the analysis.
+
+#### **Properties**
+All possible S-parameters up to a 5-port network are predefined as properties for quick access and auto-completion purposes.
+- **`S11`**: The S11 array data.
+- **`S12`**: The S12 array data.
+- **`S55`**: The S55 array data.
+
+#### **Key Methods**
+Most of the methods mentioned below are defined as `Network` methods.
+
+- **`S(i: int, j: int) -> np.ndarrayu`**
+  Returns the Sij component of the S-matrix.
 
 ---
 
@@ -204,9 +169,19 @@ hf.plot_s_parameters(frequencies, [S11, S21], labels=["S11", "S21"], linestyles=
 - **`colorcycle`**: Color indices for the lines.
 
 ---
+## Features
 
-## Future Work
+- Stochastic components and system modeling. 
+- Most common components, impedance, admittance, port, capacitor, inductor, transmission line and N-port S-parameters.
+- BaseCompont class for custom library creation
+- Cauer filter design automization (Low, high and bandpass Chebychev and Maximally flat).
+- Impedance transformers (Chebychev only)
 
+## Future features
+
+- Touchstone import
+- Advanced PCB Router
+- Larger library of components and predefined interfaces/functions
 - Support for nonlinear components (e.g., transistors, diodes).
 - Time-domain simulations.
 - Enhanced visualization capabilities.
@@ -215,11 +190,7 @@ hf.plot_s_parameters(frequencies, [S11, S21], labels=["S11", "S21"], linestyles=
 
 ## Contributing
 
-Contributions are welcome! To get started:
-
-1. Fork the repository.
-2. Create a new branch for your feature or bugfix.
-3. Submit a pull request with a detailed description.
+Contributing options come later. Please reach out via my website: www.emerge-tools.org
 
 ---
 
@@ -227,9 +198,5 @@ Contributions are welcome! To get started:
 
 This project is licensed under the MIT License. See the LICENSE file for details.
 
----
 
-## Acknowledgments
-
-Heavi draws inspiration from the pioneering work of circuit analysis and transmission line theory, honoring contributors like Oliver Heaviside and Gustav Kirchhoff.
 
