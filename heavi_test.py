@@ -18,6 +18,6 @@ f = hf.frange(1.8e9, 2.2e9, 2001)
 
 S = model.run_sparameter_analysis(f)
 
-hf.plot_s_parameters(f, [S.S11, S.S21], labels=["S21"], linestyles=["-","-"], colorcycle=[0,1])
+hf.plot_s_parameters(f, [S.S11, S.S21], labels=["S11", "S21"], linestyles=["-","-"], colorcycle=[0,1])
 
 model.print_components()
