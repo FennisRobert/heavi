@@ -17,7 +17,7 @@ Heavi is a Python-based circuit simulation library designed for efficient modeli
 For now, clone the repository and install locally:
 
 ```bash
-git clone <repository-url>
+git clone https://github.com/FennisRobert/heavi.git
 cd heavi
 pip install .
 ```
