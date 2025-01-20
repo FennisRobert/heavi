@@ -11,12 +11,14 @@ requires-python = ">=3.10,<4.0"
 dependencies = [
     "numba (>=0.61.0,<0.62.0)",
     "numpy (<2.2)",
-    "matplotlib (>=3.10.0,<4.0.0)",
+    "matplotlib (<=3.9)",
     "loguru (>=0.7.3,<0.8.0)",
     "sympy (>=1.13.3,<2.0.0)"
 ]
 
+[project.optional-dependencies]
+build = ["setuptools", "cython"]
+compile = ["cchardet"]
 
-[build-system]
-requires = ["poetry-core>=2.0.0,<3.0.0"]
-build-backend = "poetry.core.masonry.api"
+[tool.uv]
+no-build-isolation-package = ["cchardet"]

@@ -1,4 +1,5 @@
 import heavi as hf
+from heavi.lib import smd
 
 ## A sipmle test case of a two port with a 4th order filter and sparameter analaysis and plotting
 
@@ -10,7 +11,7 @@ n2 = model.node()
 n3 = model.node()
 p2 = model.terminal(n3, 50)
 
-resistor = hf.lib.smd.SMDResistor(5, hf.lib.smd.SMDResistorSize.R0402).connect(n2,n3)
+resistor = smd.SMDResistor(5, smd.SMDResistorSize.R0402).connect(n2,n3)
 
 model.filters.cauer_filter(model.gnd, n1, n2, 2e9, 70e6, 5, 0.03, hf.FilterType.CHEBYCHEV, type=hf.BandType.BANDPASS)
 
