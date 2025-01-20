@@ -14,12 +14,6 @@ Heavi is a Python-based circuit simulation library designed for efficient modeli
 
 ## Installation
 
-Install Heavi using pip (future work):
-
-```bash
-pip install heavi
-```
-
 For now, clone the repository and install locally:
 
 ```bash
@@ -72,21 +66,126 @@ model.print_components()
 
 ## API Reference
 
-### `hf.Model()`
-The central object for building and simulating circuits.
+### heavi.Model
+The `Model` class is the central interface for building and simulating circuits.
 
-- **`node()`**: Creates a new circuit node.
-- **`terminal(node, impedance)`**: Defines a terminal connected to a node with a given impedance.
-- **`run_sparameter_analysis(frequencies)`**: Runs S-parameter analysis over the given frequency range.
-- **`print_components()`**: Prints a list of all components in the model.
+#### **Initialization**
+```python
+Model(default_name: str = "Node", filter_library: Filtering = Filtering, component_library: Library = Library)
+```
+- **`default_name`**: Default prefix for node names.
+- **`filter_library`**: Library for filter definitions.
+- **`component_library`**: Library for circuit components.
 
-### `hf.lib.smd.SMDResistor(resistance, size)`
-Creates an SMD resistor with specified resistance and size.
+#### **Key Methods**
 
-- **`connect(node1, node2)`**: Connects the resistor between two nodes.
+- **`node(name: str = None) -> Node`**
+  Creates a new circuit node.
 
-### `model.filters.cauer_filter(gnd, input, output, center_freq, bandwidth, order, ripple, type, band_type)`
-Adds a Cauer filter with specified parameters to the circuit.
+- **`terminal(signal_node: Node, Z0: float, gnd_node: Node = None) -> Terminal`**
+  Adds a terminal to the circuit with a specified impedance.
+
+- **`run_sparameter_analysis(frequencies: np.ndarray) -> Sparameters`**
+  Runs S-parameter analysis for the specified frequency range.
+
+- **`print_components()`**
+  Displays an overview of all components in the circuit.
+
+- **`resistor(node1: Node, node2: Node, R: float) -> Component`**
+  Adds a resistor between two nodes.
+
+- **`capacitor(node1: Node, node2: Node, C: float) -> Component`**
+  Adds a capacitor between two nodes.
+
+- **`inductor(node1: Node, node2: Node, L: float) -> Component`**
+  Adds an inductor between two nodes.
+
+- **`transmissionline(gnd: Node, port1: Node, port2: Node, Z0: float, er: float, L: float) -> Component`**
+  Adds a transmission line with specified properties.
+
+---
+
+### heavi.Network
+The `Network` class provides foundational methods for building and analyzing circuits.
+
+#### **Initialization**
+```python
+Network(default_name: str = 'Node')
+```
+- **`default_name`**: Default prefix for node names.
+
+#### **Key Methods**
+
+- **`named_node(prefix: str) -> Node`**
+  Adds a named node to the network.
+
+- **`mnodes(N: int, name: str = None) -> list[Node]`**
+  Creates multiple nodes with a shared prefix.
+
+- **`admittance(node1: Node, node2: Node, Y: float) -> Component`**
+  Adds an admittance component between two nodes.
+
+- **`impedance(node1: Node, node2: Node, Z: float, component_type: ComponentType = ComponentType.IMPEDANCE) -> Component`**
+  Adds an impedance component between two nodes.
+
+- **`random_two_port(gnd: Node, port1: Node, port2: Node, VSWR: float, Loss: float, Z0: float) -> Component`**
+  Generates a stochastic two-port network.
+
+- **`random_power_splitter(gnd: Node, pin: Node, pouts: list[Node], port_VSWR: float = 1, transmission_loss: float = 0, Z0: float = 50.0) -> Component`**
+  Creates a multi-port power splitter with randomized parameters.
+
+---
+
+### heavi.rfcircuit.Z0_VSWR
+```python
+Z0_VSWR(Z0: float, max_vswr: float) -> float
+```
+Generates a random real impedance for a given reference impedance `Z0` and maximum VSWR.
+
+#### Parameters:
+- **`Z0`**: Reference impedance in ohms.
+- **`max_vswr`**: Maximum Voltage Standing Wave Ratio.
+
+#### Returns:
+- **`float`**: Random impedance.
+
+---
+
+### heavi.plot_s_parameters
+```python
+plot_s_parameters(frequencies: np.ndarray, S_parameters: list[np.ndarray], labels: list[str], linestyles: list[str], colorcycle: list[int])
+```
+Plots S-parameter data.
+
+#### Parameters:
+- **`frequencies`**: Frequency range in Hz.
+- **`S_parameters`**: List of S-parameter arrays.
+- **`labels`**: Labels for each plot line.
+- **`linestyles`**: Line styles for each plot line.
+- **`colorcycle`**: List of color indices for the plot.
+
+---
+
+### heavi.rfcircuit.Component
+The `Component` class represents an individual circuit element, such as a resistor or capacitor.
+
+#### **Attributes**
+- **`nodes`**: List of connected nodes.
+- **`type`**: Type of the component (e.g., resistor, capacitor).
+- **`display_value`**: Displayed value of the component.
+
+---
+
+### heavi.sparam.Sparameters
+The `Sparameters` class encapsulates the results of S-parameter analysis.
+
+#### **Attributes**
+- **`S`**: S-parameter matrix.
+- **`frequencies`**: Frequency range associated with the analysis.
+
+---
+
+For more advanced usage, refer to the inline documentation in the `heavi` package or the source code.
 
 ---
 
