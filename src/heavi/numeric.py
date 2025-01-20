@@ -1,0 +1,226 @@
+from __future__ import annotations
+import numpy as np
+from typing import Callable
+from abc import ABC, abstractmethod
+from itertools import product
+
+class Uninitialized:
+
+    def __init__(self):
+        pass
+
+    def __repr__(self):
+        return "Uninitialized"
+    
+    def __call__(self, f):
+        raise ValueError("Uninitialized value")
+    
+    def __mul__(self, other):
+        raise ValueError("Uninitialized value")
+    
+    def __add__(self, other):
+        raise ValueError("Uninitialized value")
+    
+    def __sub__(self, other):
+        raise ValueError("Uninitialized value") 
+    
+
+    
+class SimValue:
+
+    def __init__(self, value: float):
+        self._value = value
+
+    @property
+    def value(self) -> float:
+        return self(1)
+    
+    def scalar(self) -> float:
+        return self(1)
+    
+    def initialize(self) -> None:
+        pass
+
+    def __call__(self, f: np.ndarray) -> np.ndarray:
+        return np.ones_like(f) * self._value
+    
+    def __repr__(self) -> str:
+        return f"SimValue({self._value})"
+    
+    def negative(self) -> SimValue:
+        return SimValue(-self._value)
+    
+    def inverse(self) -> SimValue:
+        return SimValue(1/self._value)
+    
+class Negative(SimValue):
+
+    def __init__(self, value: SimValue):
+        self._value: SimValue = value
+
+    def __repr__(self) -> str:
+        return f"Negative({self._value})"
+    def __call__(self, f: np.ndarray) -> np.ndarray:
+        return -self._value(f)
+    
+    def negative(self) -> SimValue:
+        return self._value
+
+class Inverse(SimValue):
+    
+    def __init__(self, value: SimValue):
+        self._value: SimValue = value
+
+    def __repr__(self) -> str:
+        return f"Inverse({self._value})"
+    
+    def __call__(self, f: np.ndarray) -> np.ndarray:
+        return 1/self._value(f)
+    
+    def negative(self) -> SimValue:
+        return Negative(self)
+    
+    def inverse(self) -> SimValue:
+        return self._value
+    
+class Function(SimValue):
+
+    def __init__(self, function: Callable[[np.ndarray], np.ndarray]):
+        self._function = function
+
+    def __repr__(self) -> str:
+        return f"Function({self._function})"
+    
+    def __call__(self, f: np.ndarray) -> np.ndarray:
+        return self._function(f)
+    
+    def negative(self) -> SimValue:
+        return Function(lambda f: -self._function(f))
+
+    def inverse(self) -> SimValue:
+        return Function(lambda f: 1/self._function(f))
+    
+    
+class Random(SimValue):
+
+    def __init__(self, randomizer: Callable):
+        self._randomizer = randomizer
+        self._value = Uninitialized()
+
+    def initialize(self):
+        self._value = self._randomizer()
+
+    def __repr__(self):
+        return f"Gaussian({self._mean}, {self._std})"   
+    
+    def __call__(self, f):
+        return self._value * np.ones_like(f)
+    
+    def negative(self) -> SimValue:
+        return Negative(self)
+    
+    def inverse(self) -> SimValue:
+        return Inverse(self)
+    
+class Param(SimValue):
+
+    def __init__(self, values: np.ndarray):
+        self._values = values
+        self._index: int = 0
+        self._value = Uninitialized()
+
+    def __len__(self):
+        return len(self._values)
+    
+    def set_index(self, index: int):
+        self._index = index
+    
+    def initialize(self):
+        self._value = self._values[self._index]
+
+    def __repr__(self):
+        ## shortened list of values (start and end only)
+        return f"Param({self._values[0]}, ..., {self._values[-1]})"
+    
+    def __call__(self, f):
+        return self._value * np.ones_like(f)
+    
+    def negative(self) -> SimValue:
+        return Negative(self)
+    
+    def inverse(self) -> SimValue:
+        return Inverse(self)
+    
+class ParameterSweep:
+
+    def __init__(self):
+        self.sweep_dimensions: list[tuple[Param]] = []
+        self.index_series: list[tuple[int]] = []
+        self._index: int = 0
+    
+    
+    def iterate(self):
+        '''An iterator that first compiles the total'''
+        # Make a list of all dimensional index tuples as the product of the lengths of each dimension
+        total = 1
+        for dimension in self.sweep_dimensions:
+            total *= len(dimension)
+
+        # make a check for total above 10,000
+        if total > 10000:
+            raise ValueError(f"Total iterations ({total}) is above 10,000, are you sure you want to continue?")
+        
+        # Get all the length of the dimensions of the parameter sweep
+        lengths = [len(dimension[0]) for dimension in self.sweep_dimensions]
+
+        # make a list of indices like [(0,0,0),(1,0,0),(2,0,),...,(N,M,K)] using itertools
+        indices = list(product(*[range(length) for length in lengths]))
+        
+        for ixs in indices:
+            print(ixs)
+            # set the index of each dimensional Param object
+            for i, params in zip(ixs, self.sweep_dimensions):
+                for param in params:
+                    param.set_index(i)
+                    param.initialize()
+            yield ixs
+
+    def add_dimension(self, *params: tuple[Param]):
+        self.sweep_dimensions.append(params)
+
+class MonteCarlo:
+
+    def __init__(self):
+        self._random_numbers: list[Random] = []
+
+    def gaussian(self, mean: float, std: float) -> Random:
+        random = Random(lambda: np.random.normal(mean, std))
+        self._random_numbers.append(random)
+        return random
+    
+    def uniform(self, low: float, high: float) -> Random:
+        random = Random(lambda: np.random.uniform(low, high))
+        self._random_numbers.append(random)
+        return random
+    
+    def iterate(self, N: int):
+        for i in range(N):
+            for random in self._random_numbers:
+                random.initialize()
+            yield i
+    
+def parse_numeric(value: float | SimValue | Callable, inverse: bool = False) -> SimValue:
+    if isinstance(value, SimValue):
+        if inverse:
+            return value.inverse()
+        return value
+    elif isinstance(value, Callable):
+        if inverse:
+            return Function(lambda f: 1/value(f))
+        return Function(value)
+    elif isinstance(value, (int, float, complex)):
+        if inverse:
+            SimValue(1/value)
+        return SimValue(value)
+    else:
+        raise ValueError(f"Invalid value type: {type(value)}")
