@@ -1,9 +1,13 @@
+[build-system]
+requires = ["setuptools>=42", "wheel"]
+build-backend = "setuptools.build_meta"
+
 [project]
 name = "heavi"
-version = "0.1.0"
+version = "0.1.1"
 description = "An RF circuit simulator"
 readme = "README.md"
-requires-python = ">=3.13"
+requires-python = ">=3.10"
 dependencies = [
     "matplotlib>=3.10.0",
     "numba-progress>=1.1.0",
