@@ -22,6 +22,7 @@ cd heavi
 pip install .
 ```
 
+Optionally, its easier to just download the 
 ---
 
 ## Getting Started
