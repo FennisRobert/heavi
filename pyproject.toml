@@ -1,0 +1,10 @@
+[project]
+name = "heavi"
+version = "0.1.0"
+description = "An RF circuit simulator"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "matplotlib>=3.10.0",
+    "numpy>=2.2.2",
+]
