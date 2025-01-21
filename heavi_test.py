@@ -3,7 +3,7 @@ from heavi.lib import smd
 import numpy as np
 ## A sipmle test case of a two port with a 4th order filter and sparameter analaysis and plotting
 
-model = hf.Model()
+model = hf.Model(suppress_loadbar=True)
 
 mc = hf.MonteCarlo()
 

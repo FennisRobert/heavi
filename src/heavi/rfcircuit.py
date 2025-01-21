@@ -204,6 +204,68 @@ def compute_s_parameters(Is, Ys, Zs, port_indices, frequencies, progress_object)
             progress_object.update(1)
     return S_parameters
 
+@njit(cache=True, parallel=True, fastmath=True)
+def compute_s_parameters_no_loadbar(Is, Ys, Zs, port_indices, frequencies):
+    """
+    Compute the S-parameter matrix for an RF network using Numba for acceleration.
+
+    Parameters
+    ----------
+    Is : numpy.ndarray
+        Current sources, complex-valued array of shape (n_nodes, n_ports, n_freqs).
+    Ys : numpy.ndarray
+        Admittance matrices, complex-valued array of shape (n_nodes, n_nodes, n_freqs).
+    Zs : numpy.ndarray
+        Source impedances, complex-valued array of shape (n_nodes, n_freqs).
+    port_indices : numpy.ndarray
+        Indices of the nodes corresponding to the ports of interest, integer array of shape (n_ports,).
+    frequencies : numpy.ndarray
+        Frequencies, float-valued array of shape (n_freqs,).
+
+    Returns
+    -------
+    S_parameters : numpy.ndarray
+        S-parameter matrix, complex-valued array of shape (n_ports, n_ports, n_freqs).
+    """
+    num_ports = len(port_indices)
+    num_freqs = len(frequencies)
+    num_nodes = Is.shape[0]
+
+    # Initialize the S-parameter matrix
+    S_parameters = np.zeros((num_ports, num_ports, num_freqs), dtype=np.complex128)
+
+    # Voltage vector placeholder
+    Vh = np.zeros((num_nodes,), dtype=np.complex128)
+
+    for port_in_idx in range(num_ports):
+        node_in = port_indices[port_in_idx]
+        for freq_idx in prange(num_freqs):
+            # Reset voltage vector
+            Vh = 0*Vh
+
+            # Solve the system of equations for Vh[1:]
+            Vh[1:] = np.linalg.solve(
+                Ys[:,:, freq_idx],
+                Is[1:, port_in_idx, freq_idx]
+            )
+
+            Z_in = Zs[port_in_idx, freq_idx]
+
+            for port_out_idx in range(num_ports):
+                node_out = port_indices[port_out_idx]
+                Z_out = Zs[port_out_idx, freq_idx]
+
+                # Calculate scaling factor Q
+                Q = np.sqrt(np.abs(np.real(Z_in))) / np.sqrt(np.abs(np.real(Z_out)))
+
+                # Compute numerator and denominator for S-parameter calculation
+                numerator = Vh[node_out] * 2 - Z_out * Is[node_out, port_in_idx, freq_idx]
+                denominator = Z_in * Is[node_in, port_in_idx, freq_idx]
+
+                # Compute S-parameter
+                S_parameters[port_out_idx, port_in_idx, freq_idx] = Q * (numerator / denominator)
+    return S_parameters
+
 @dataclass
 class Node:
     """ Node class for the Network object. """
@@ -306,7 +368,7 @@ class Network:
         The starting index for the node name counter.
     """
 
-    def __init__(self, default_name: str = 'Node'):
+    def __init__(self, default_name: str = 'Node', suppress_loadbar: bool = False):
         self.gnd: Node = Node("gnd", _parent=self)
         self.nodes: list[Node] = [self.gnd]
         self.components: list[Component] = []
@@ -314,6 +376,7 @@ class Network:
         self.terminals: list[Terminal] = []
         self.node_counter: defaultdict[str, int] = defaultdict(int)
         self.node_default_name: str = default_name
+        self.suppress_loadbar: bool = suppress_loadbar
 
     def print_components(self) -> None:
         '''Prints an overview of the components in the Network'''
@@ -393,8 +456,6 @@ class Network:
                 raise ValueError(f"Node {node.name} is not connected to any components.")
         
 
-
-
     def run_sparameter_analysis(self, frequencies: np.ndarray) -> Sparameters:
         """
         Runs an S-parameter analysis for the network at the specified frequencies.
@@ -436,8 +497,11 @@ class Network:
         frequencies = np.array(frequencies).astype(np.float32)
         Sol = None
 
-        with nbp.ProgressBar(total=ntot) as progress:
-            Sol = compute_s_parameters(Is, Ys, Zs, indices, frequencies, progress) 
+        if self.suppress_loadbar:
+            Sol = compute_s_parameters_no_loadbar(Is, Ys, Zs, indices, frequencies)
+        else:
+            with nbp.ProgressBar(total=ntot) as progress:
+                Sol = compute_s_parameters(Is, Ys, Zs, indices, frequencies, progress) 
         
         return Sparameters(Sol, frequencies)
     
@@ -487,24 +551,23 @@ class Network:
         self.terminals.append(terminal_object)
         return terminal_object
 
-    def terminode(self, number: int, impedance: float) -> tuple[Node, Terminal]:
+    def port(self, impedance: float) -> Node:
         '''Returns a tuple containing a Node and Terminal object.
         The Node object is generated with a name corresponding to the number.
         The Terminal object is generated with the Node object and the provided impedance
         
         Parameters:
         -----------
-        number (int): The number to be used for the Node object name.
         impedance (float): The impedance value for the Terminal object.
         
         Returns:
         --------
-        tuple[Node, Terminal]: A tuple containing the Node and Terminal objects.
+        Node: The ports output node
         '''
 
         node = self.node()
-        terminal = self.terminal(node, impedance)
-        return node, terminal
+        self.terminal(node, impedance)
+        return node
     
     def admittance(self, node1: Node, node2: Node, Y: float, 
                   component_type: ComponentType = ComponentType.ADMITTANCE,
@@ -616,54 +679,9 @@ class Network:
         
         admittance = Function(admittance_f)
         
-        return self.admittance(node1, node2, admittance, component_type=ComponentType.CAPACITOR, display_value=C.scalar())
+        return self.admittance(node1, node2, admittance, component_type=ComponentType.CAPACITOR, display_value=C)
         
-        # functionlist = []
-
-        # functionlist.append(
-        #     ComponentFunction([node1, node1], lambda f: 1j * twopi * C * f)
-        # )
-        # functionlist.append(
-        #     ComponentFunction([node1, node2], lambda f: -1j * twopi * C * f)
-        # )
-        # functionlist.append(
-        #     ComponentFunction([node2, node1], lambda f: -1j * twopi * C * f)
-        # )
-        # functionlist.append(
-        #     ComponentFunction([node2, node2], lambda f: 1j * twopi * C * f)
-        # )
-        # capacitor_component = Component([node1, node2], functionlist, type=ComponentType.CAPACITOR, display_value=C)
-        # self.components.append(capacitor_component)
-        # return capacitor_component
-
-    # def capacitor_comp(self, node1: Node, node2: Node, C: float, Lseries: float = 1e-12, Rseries: float = 1e-5, Rpar: float = 10e6) -> tuple[Component]:
-    #     """
-    #     Adds a capacitor component to the circuit with optional series inductance and resistance, 
-    #     and parallel resistance.
-    #     Args:
-    #         node1 (Node): The first node of the capacitor.
-    #         node2 (Node): The second node of the capacitor.
-    #         C (float): Capacitance value in Farads.
-    #         Lseries (float, optional): Series inductance value in Henries. Defaults to 1e-12.
-    #         Rseries (float, optional): Series resistance value in Ohms. Defaults to 1e-5.
-    #         Rpar (float, optional): Parallel resistance value in Ohms. Defaults to 10e6.
-    #     Returns:
-    #         tuple[Component]: A tuple containing the capacitor component.
-    #     """
         
-    #     functionlist = []
-    #     def admittance_function(f):
-    #         return 1/(Rseries + 1j*twopi*f*Lseries + Rpar/(1j*twopi*f*Rpar*C + 1))
-        
-    #     functionlist.append(ComponentFunction([node1, node1], admittance_function))
-    #     functionlist.append(ComponentFunction([node1, node2], lambda f: -admittance_function(f)))
-    #     functionlist.append(ComponentFunction([node2, node1], lambda f: -admittance_function(f)))
-    #     functionlist.append(ComponentFunction([node2, node2], admittance_function))
-    #     impedance_object = Component([node1, node2], functionlist, type=ComponentType.CAPACITOR, display_value=C)
-    #     self.components.append(impedance_object)
-
-
-
     def inductor(self, node1: Node, node2: Node, L: float):
         """
         Adds an inductor component between two nodes in the circuit.
@@ -681,97 +699,8 @@ class Network:
         
         admittance = Function(admittance_f)
         
-        return self.admittance(node1, node2, admittance, component_type=ComponentType.INDUCTOR, display_value=L.scalar())
+        return self.admittance(node1, node2, admittance, component_type=ComponentType.INDUCTOR, display_value=L)
     
-        # functionlist = []
-        # functionlist.append(
-        #     ComponentFunction([node1, node1], lambda f: 1 / (1j * twopi * f * L))
-        # )
-        # functionlist.append(
-        #     ComponentFunction([node1, node2], lambda f: -1 / (1j * twopi * f * L))
-        # )
-        # functionlist.append(
-        #     ComponentFunction([node2, node1], lambda f: -1 / (1j * twopi * f * L))
-        # )
-        # functionlist.append(
-        #     ComponentFunction([node2, node2], lambda f: 1 / (1j * twopi * f * L))
-        # )
-        # Ind = Component([node1, node2], functionlist, type=ComponentType.INDUCTOR, display_value=L)
-        # self.components.append(Ind)
-        # return Ind
-
-    # def inductor_comp(self, node1: Node, 
-    #                   node2: Node, 
-    #                   L: float, 
-    #                   fres: float = 1e9, 
-    #                   Rpar: float = 10e6, 
-    #                   Rseries: float = 1e-5) -> tuple[Component]:
-    #     """
-    #     Adds an inductor component to the circuit with specified parameters.
-    #     Parameters:
-    #     -----------
-    #     node1 (Node): The first node of the inductor.
-    #     node2 (Node): The second node of the inductor.
-    #     L (float): Inductance value in Henrys.
-    #     fres (float, optional): Resonant frequency in Hz. Default is 1e9 Hz.
-    #     Rpar (float, optional): Parallel resistance in Ohms. Default is 10e6 Ohms.
-    #     Rseries (float, optional): Series resistance in Ohms. Default is 1e-5 Ohms.
-    #     Returns:
-    #     --------
-    #     tuple[Component]: A tuple containing the inductor component.
-    #     """
-        
-    #     functionlist = []
-        
-    #     Cpar = 1/(L*(twopi*fres)**2)
-    #     def admittance_function(f):
-    #         return 1/(Rseries + (1j*twopi*f*L*Rpar)/(1j*twopi*f*L+(1-(twopi*f)**2*L*Cpar)*Rpar))
-        
-    #     functionlist.append(ComponentFunction([node1, node1], admittance_function))
-    #     functionlist.append(ComponentFunction([node1, node2], lambda f: -admittance_function(f)))
-    #     functionlist.append(ComponentFunction([node2, node1], lambda f: -admittance_function(f)))
-    #     functionlist.append(ComponentFunction([node2, node2], admittance_function))
-    #     impedance_object = Component([node1, node2], functionlist, type=ComponentType.INDUCTOR, display_value=L)
-    #     self.components.append(impedance_object)
-
-    def random_transmissionline(self, gnd: Node, port1: Node, port2: Node, 
-                                
-                                Z0: float,
-                                er: float,
-                                L: float,
-                                tand: float = 0,
-                                transmission_loss: float = 0,
-                                reference_frequency: float = 1e9) -> Component:
-        
-        """
-        Generates a random transmission line component with specified parameters.
-        Parameters:
-        -----------
-        gnd (Node): The ground node of the transmission line.
-        port1 (Node): The first port node of the transmission line.
-        port2 (Node): The second port node of the transmission line.
-        Z0 (float): The characteristic impedance of the transmission line.
-        er (float): The relative permittivity of the transmission line.
-        L (float): The length of the transmission line.
-        tand (float, optional): The loss tangent of the transmission line. Defaults to 0.
-        transmission_loss (float, optional): The transmission loss of the line. Defaults to 0.
-        reference_frequency (float, optional): The reference frequency for the transmission line. Defaults to 1e9 Hz.
-        Returns:
-        --------
-        Component: A transmission line component with the specified parameters.
-        """
-        tand = parse_numeric(tand)
-        Z0v = parse_numeric(Z0)
-        transmission_loss = parse_numeric(transmission_loss)
-        reference_frequency = parse_numeric(reference_frequency)
-        Lv = parse_numeric(L)
-        er = parse_numeric(er)
-        
-        tandsimval = Function(lambda f: tand(f) + (transmission_loss(f)/Lv(f)) * 299792458/(reference_frequency(f)*27.28754*np.sqrt(er(f))))
-        
-        ersimval = Function(lambda f: er(f) * (1 - tandsimval(f)*1j))
-
-        return self.transmissionline(gnd, port1, port2, Z0v, ersimval, Lv)
         
     def transmissionline(
         self, gnd: Node, port1: Node, port2: Node, Z0: float, er: float, L: float
@@ -897,149 +826,6 @@ class Network:
         self.components.append(transmissionline_component)
         return transmissionline_component
 
-    def random_two_port(
-        
-        self, gnd: Node, port1: Node, port2: Node, VSWR: float | SimValue, Loss: float | SimValue, Z0: float | SimValue
-    ) -> Component:
-        """
-        Generates a random two-port network component with specified parameters.
-        Parameters:
-        -----------
-        gnd : Node
-            The ground node of the circuit.
-        port1 : Node
-            The first port node of the two-port network.
-        port2 : Node
-            The second port node of the two-port network.
-        VSWR : float
-            Voltage Standing Wave Ratio, used to determine the reflection coefficient.
-        Loss : float
-            Insertion loss in dB, used to determine the magnitude of S21.
-        Z0 : float
-            Characteristic impedance of the network.
-        Returns:
-        --------
-        Component
-            A two-port network component with the specified parameters.
-        """
-        lossmag = 10 ** (-Loss / 20)
-        vswr1 = randmag(1, VSWR)
-        vswr2 = randmag(1, VSWR)
-
-        reflect1 = (vswr1 - 1) / (vswr1 + 1)
-        reflect2 = (vswr2 - 1) / (vswr2 + 1)
-
-        A, B = randphase(), randphase()
-
-        def S11(f):
-            return A * reflect1
-        def S22(f):
-            return B * reflect2
-        def S21(f):
-            return B * lossmag
-        return self.two_port_reciprocal(gnd, port1, port2, S11, S21, S22, Z0)
-
-    def random_power_splitter(
-        self,
-        gnd: Node,
-        pin: Node,
-        pouts: list[Node],
-        port_VSWR: float = 1,
-        transmission_loss: float = 0,
-        Z0: float = 50.0,
-        isolation: float = -80,
-        transmission_phase: float = 0
-    ) -> Component:
-        """
-        Creates an (M+1)-port 'quasi-ideal' stochastic power splitter:
-        - One input port (pin)
-        - M = len(pouts) output ports
-        Each port gets a random reflection based on a uniform VSWR in [1, port_VSWR].
-        The total transmission from pin -> each pout is split equally in power (1/M),
-        then scaled by 'transmission_loss' (dB). Random phases are added to reflections and transmissions.
-
-        Parameters
-        ----------
-        gnd : Node
-            Common ground node.
-        pin : Node
-            The input port node.
-        pouts : list[Node]
-            The list of output port nodes.
-        port_VSWR : float, optional
-            The maximum possible VSWR for each port, by default 1 (i.e., no mismatch).
-        transmission_loss : float, optional
-            Transmission loss in dB (applied equally to all outputs), by default 0.
-        Z0 : float, optional
-            Reference impedance for the S-parameters, by default 50 Ohms.
-
-        Returns
-        -------
-        Component
-            The N-port component that represents this power splitter.
-        """
-        Z0 = parse_numeric(Z0)
-        transmission_phase = parse_numeric(transmission_phase)
-        isolation = parse_numeric(Z0)
-
-        # Number of output ports
-        M = len(pouts)
-        # Total ports = 1 input + M outputs
-        N = M + 1
-
-        # Gather all ports in a list: port 0 = pin, port i>0 => pouts[i-1]
-        all_ports = [pin] + pouts
-
-        # Convert the dB loss into a linear magnitude factor
-        loss_mag = 10 ** (-transmission_loss / 20)
-        isolation_amp = 10**(-np.abs(isolation) / 20)
-
-        # Build an NxN array of callables for S-parameters
-        # Sparam[i][j] is a function f -> complex
-        Sparam = [[None for _ in range(N)] for _ in range(N)]
-
-        # 1) Random reflection for each port (VSWR-based, random phase)
-        for i in range(N):
-            vswr_rand = randmag(1, port_VSWR)     # uniform random in [1, port_VSWR]
-            reflect_mag = (vswr_rand - 1) / (vswr_rand + 1)
-            phase = randphase()
-            Sparam[i][i] = (  # Siila
-                lambda mag=reflect_mag, ph=phase:
-                    (lambda f: mag * ph * np.ones_like(f))  # frequency-independent
-            )()
-
-        # 2) Set up transmissions from port 0 -> each output, and reciprocal
-        #    The amplitude for each output is loss_mag / sqrt(M), plus random phase
-        if M > 0:
-            amp_each = loss_mag / np.sqrt(M)
-            for i in range(1, N):
-                # random phase for this output
-                phase_ij = 1
-                val_ij = amp_each * phase_ij * np.sqrt(1-np.abs(Sparam[i][i](1))**2) # complex amplitude
-
-                # S[i,0] and S[0,i] must match for reciprocity
-                Sparam[i][0] = (lambda v=val_ij: (lambda f: v * np.ones_like(f)))()
-                Sparam[0][i] = (lambda v=val_ij: (lambda f: v * np.ones_like(f)))()
-
-        # 3) Zero out cross-coupling between outputs (ideal isolation):
-        #    S[i,j] = 0 for i != j, excluding anything with 0 we already set
-        for i in range(1, N):
-            for j in range(1, N):
-                if i != j:
-                    phase = randphase()
-                    Sparam[i][j] = (lambda f: phase*isolation_amp* np.ones_like(f))
-
-        # Now we have an NxN array of S-parameter callables
-        # Pass them into the N-port reciprocal function
-        # This will create one N-port Component with Y-parameters
-        comp = self.n_port_S(
-            gnd=gnd,
-            nodes=all_ports,    # port0=pin, port1..M = pouts
-            Sparam=Sparam,
-            Z0=Z0
-        )
-        return comp
-
     def two_port_reciprocal(
         self,
         gnd: Node,
@@ -1119,50 +905,50 @@ class Network:
                 Y2[i,N,:] = -np.sum(Y[i,:,:],axis=0)
                 Y2[N,i,:] = -np.sum(Y[:,i,:],axis=0)
                 Y2[N,N,:] += np.sum(Y[i,:,:],axis=0)
-            #Y2[-1,-1,:] = -np.sum(Y2[:,-1,:],axis=0)
             return Y2
         component = Component(nodes + [gnd, ],[ComponentFunction(nodes + [gnd, ],Function(comp_function),True),],ComponentType.NPORT, Z0 )
         self.components.append(component)
 
     
 
-    def transmissionline_partwise(
-        self, gnd: Node, port1: Node, port2: Node, func_z0: float, func_er: float, L: float
-    ) -> tuple[Component, Component, Component]:
-        '''Generates and returns a tuple of three impedance components that correspond to a transmission line.
-        The transmission line is divided into three parts: port1 to port2, port1 to gnd, and port2 to gnd.
+    # An old implementation of the transmission line function that is not used and not convenient.
+    
+    # def transmissionline_partwise(
+    #     self, gnd: Node, port1: Node, port2: Node, func_z0: float, func_er: float, L: float
+    # ) -> tuple[Component, Component, Component]:
+    #     '''Generates and returns a tuple of three impedance components that correspond to a transmission line.
+    #     The transmission line is divided into three parts: port1 to port2, port1 to gnd, and port2 to gnd.
         
-        Parameters
-        ----------
-        gnd : Node
-            The ground node.
-        port1 : Node
-            The first port node.
-        port2 : Node
-            The second port node.
+    #     Parameters
+    #     ----------
+    #     gnd : Node
+    #         The ground node.
+    #     port1 : Node
+    #         The first port node.
+    #     port2 : Node
+    #         The second port node.
         
-        '''
+    #     '''
+    #     functionlist = []
+    #     c0 = 299792458
+    #     func_er = _make_callable(func_er)
+    #     func_z0 = _make_callable(func_z0)
 
-        functionlist = []
-        c0 = 299792458
-        func_er = _make_callable(func_er)
-        func_z0 = _make_callable(func_z0)
-
-        Z1 = self.impedance(
-            gnd,
-            port1,
-            lambda f: 1 / (func_z0(f) * np.tanh(L * 2 * pi * f * np.sqrt(func_er(f)) / c0))
-            - 1 / (func_z0(f) * np.sinh(L * 2 * pi * f * np.sqrt(func_er(f)) / c0)),
-        )
-        Z2 = self.impedance(
-            port1,
-            port2,
-            lambda f: 1 / (func_z0(f) * np.sinh(L * 2 * pi * f * np.sqrt(func_er(f)) / c0)),
-        )
-        Z3 = self.impedance(
-            gnd,
-            port2,
-            lambda f: 1 / (func_z0(f) * np.tanh(L * 2 * pi * f * np.sqrt(func_er(f)) / c0))
-            - 1 / (func_z0(f) * np.sinh(L * 2 * pi * f * np.sqrt(func_er(f)) / c0)),
-        )
-        return [Z1, Z2, Z3]
+    #     Z1 = self.impedance(
+    #         gnd,
+    #         port1,
+    #         lambda f: 1 / (func_z0(f) * np.tanh(L * 2 * pi * f * np.sqrt(func_er(f)) / c0))
+    #         - 1 / (func_z0(f) * np.sinh(L * 2 * pi * f * np.sqrt(func_er(f)) / c0)),
+    #     )
+    #     Z2 = self.impedance(
+    #         port1,
+    #         port2,
+    #         lambda f: 1 / (func_z0(f) * np.sinh(L * 2 * pi * f * np.sqrt(func_er(f)) / c0)),
+    #     )
+    #     Z3 = self.impedance(
+    #         gnd,
+    #         port2,
+    #         lambda f: 1 / (func_z0(f) * np.tanh(L * 2 * pi * f * np.sqrt(func_er(f)) / c0))
+    #         - 1 / (func_z0(f) * np.sinh(L * 2 * pi * f * np.sqrt(func_er(f)) / c0)),
+    #     )
+    #     return [Z1, Z2, Z3]

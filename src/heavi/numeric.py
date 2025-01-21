@@ -1,7 +1,6 @@
 from __future__ import annotations
 import numpy as np
-from typing import Callable
-from abc import ABC, abstractmethod
+from typing import Callable, Generator
 from itertools import product
 
 class Uninitialized:
@@ -129,21 +128,29 @@ class Param(SimValue):
         self._index: int = 0
         self._value = Uninitialized()
 
+    @staticmethod
+    def lin(start: float, stop: float, Nsteps: int) -> Param:
+        return Param(np.linspace(start,stop,Nsteps))
+    
+    @staticmethod
+    def range(start: float, stop: float, step: float, *args, **kwargs) -> Param:
+        return Param(np.arange(start, stop, step, *args, **kwargs))
+
     def __len__(self):
         return len(self._values)
     
-    def set_index(self, index: int):
-        self._index = index
-    
-    def initialize(self):
-        self._value = self._values[self._index]
-
     def __repr__(self):
         ## shortened list of values (start and end only)
         return f"Param({self._values[0]}, ..., {self._values[-1]})"
     
     def __call__(self, f):
         return self._value * np.ones_like(f)
+    
+    def set_index(self, index: int):
+        self._index = index
+    
+    def initialize(self):
+        self._value = self._values[self._index]
     
     def negative(self) -> SimValue:
         return Negative(self)
@@ -157,9 +164,27 @@ class ParameterSweep:
         self.sweep_dimensions: list[tuple[Param]] = []
         self.index_series: list[tuple[int]] = []
         self._index: int = 0
+        self._param_buffer: list = []
     
+    def lin(self, start: float, stop: float) -> ParameterSweep:
+        self._param_buffer.append((start,None,stop))
+        return self
     
-    def iterate(self):
+    def step(self, start: float, stepsize: float) -> ParameterSweep:
+        self._param_buffer.append((start,stepsize,None))
+
+    def add(self, N: int) -> tuple[Param]:
+        params = []
+        for start, step, stop in self._param_buffer:
+            if step is None:
+                params.append(Param.lin(start,stop,N))
+            elif stop is None:
+                params.append(Param.lin(start,start+step*N,N))
+        self.add_dimension(*params)
+        self._param_buffer = []
+        return params
+    
+    def iterate(self) -> Generator[tuple[tuple[int], tuple[float]], None, None]:
         '''An iterator that first compiles the total'''
         # Make a list of all dimensional index tuples as the product of the lengths of each dimension
         total = 1
@@ -177,13 +202,14 @@ class ParameterSweep:
         indices = list(product(*[range(length) for length in lengths]))
         
         for ixs in indices:
-            print(ixs)
+            paramlist = []
             # set the index of each dimensional Param object
             for i, params in zip(ixs, self.sweep_dimensions):
                 for param in params:
                     param.set_index(i)
                     param.initialize()
-            yield ixs
+                    paramlist.append(param._value)
+            yield ixs, tuple(paramlist)
 
     def add_dimension(self, *params: tuple[Param]):
         self.sweep_dimensions.append(params)
@@ -203,7 +229,7 @@ class MonteCarlo:
         self._random_numbers.append(random)
         return random
     
-    def iterate(self, N: int):
+    def iterate(self, N: int) -> Generator[int, None, None]:
         for i in range(N):
             for random in self._random_numbers:
                 random.initialize()

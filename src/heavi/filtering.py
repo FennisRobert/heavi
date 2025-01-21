@@ -4,6 +4,7 @@ import sympy as sym
 from sympy.simplify.fu import TR0,TR8
 import numpy as np
 from loguru import logger
+
 def even(x):
     """ Returns True if x is even, False otherwise. """
     if x % 2 == 0:
