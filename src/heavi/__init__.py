@@ -1,6 +1,6 @@
 from .rfcircuit import Network, Node, Z0_VSWR
 from .graphing import plot_s_parameters
-from .design import Router, unbalanced_splitter, balanced_splitter
+from .routing import Router, unbalanced_splitter, balanced_splitter
 from .sparam import Sparameters, frange
 from .model import Model
 from .filtering import FilterType, BandType, CauerType, Filtering

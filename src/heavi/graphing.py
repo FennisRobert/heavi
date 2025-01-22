@@ -88,7 +88,7 @@ def plot_s_parameters(f, S, dblim=[-80, 5],
     for s, ls, cid in zip(Ss, linestyles, colorcycle):
         # Calculate and plot magnitude in dB
         SdB = 20 * np.log10(np.abs(s) + 10**(noise_floor/20) * np.random.rand(*s.shape) + 10**((noise_floor-30)/20))
-        ax_mag.plot(fnew, SdB, label="Magnitude (dB)", linestyle=ls, color=_colors[cid])
+        ax_mag.plot(fnew, SdB, label="Magnitude (dB)", linestyle=ls, color=_colors[cid % len(_colors)])
 
         # Calculate and plot phase in degrees
         phase = np.angle(s, deg=True)
@@ -96,7 +96,7 @@ def plot_s_parameters(f, S, dblim=[-80, 5],
             phase = np.unwrap(phase, period=360)
             minphase = min(np.min(phase), minphase)
             maxphase = max(np.max(phase), maxphase)
-        ax_phase.plot(fnew, phase, label="Phase (degrees)", linestyle=ls, color=_colors[cid])
+        ax_phase.plot(fnew, phase, label="Phase (degrees)", linestyle=ls, color=_colors[cid % len(_colors)])
 
         # Annotate level indicators if specified
         if isinstance(levelindicator, (int, float)) and levelindicator is not None:

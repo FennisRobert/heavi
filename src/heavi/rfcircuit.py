@@ -826,6 +826,31 @@ class Network:
         self.components.append(transmissionline_component)
         return transmissionline_component
 
+    def TL(self, node1: Node, node2: Node, beta: float | SimValue, length: float | SimValue, Z0: float | SimValue):
+        beta = parse_numeric(beta)
+        length = parse_numeric(length)
+        Z0 = parse_numeric(Z0)
+
+        def a11(f):
+            return np.cosh(1j*beta(f)*length(f))
+        def a12(f):
+            return Z0(f)*np.sinh(1j*beta(f)*length(f))
+        def a21(f):
+            return 1/Z0(f)*np.sinh(1j*beta(f)*length(f))
+        def a22(f):
+            return np.cosh(1j*beta(f)*length(f))
+        
+        def y11(f):
+            return a22(f)/a12(f)
+        def y12(f):
+            return -((a11(f)*a22(f))-(a12(f)*a21(f)))/a12(f)
+        def y21(f):
+            return -1/a12(f)
+        def y22(f):
+            return a11(f)/a12(f)
+        
+        self.n_port_Y(self.gnd, [node1, node2], [[y11, y12], [y21, y22]], Z0)
+
     def two_port_reciprocal(
         self,
         gnd: Node,
@@ -909,6 +934,48 @@ class Network:
         component = Component(nodes + [gnd, ],[ComponentFunction(nodes + [gnd, ],Function(comp_function),True),],ComponentType.NPORT, Z0 )
         self.components.append(component)
 
+    def n_port_Y(
+            self,
+            gnd: Node,
+            nodes: list[Node],
+            Yparams: list[list[Callable]],
+            Z0: float,
+    ) -> None:
+        """Adds an N-port Y-parameter component to the circuit.
+
+        Parameters:
+        -----------
+        gnd : Node
+            The ground node of the circuit.
+        nodes : list[Node]
+            List of nodes representing the ports of the N-port network.
+        Yparam : list[list[Callable]]
+            A nested list of callables representing the Y-parameters as functions of frequency.
+        Z0 : float
+            The reference impedance.
+        Returns:
+        --------
+        None
+        Notes:
+        ------
+        This method constructs the admittance matrix (Y-parameters)and adds the corresponding component 
+        to the circuit's component list.
+        """
+        N = len(nodes)
+
+        def comp_function(f: float):
+            nF = f.shape[0]
+            Y = np.array([[sp(f) for sp in row] for row in Yparams], dtype=np.complex128)
+            Y2 = np.zeros((N+1,N+1,nF),dtype=np.complex128)
+            Y2[:N,:N,:] = Y
+            for i in range(N):
+                Y2[i,N,:] = -np.sum(Y[i,:,:],axis=0)
+                Y2[N,i,:] = -np.sum(Y[:,i,:],axis=0)
+                Y2[N,N,:] += np.sum(Y[i,:,:],axis=0)
+            return Y2
+        component = Component(nodes + [gnd, ],[ComponentFunction(nodes + [gnd, ],Function(comp_function),True),],ComponentType.NPORT, Z0 )
+        self.components.append(component)
+    
     
 
     # An old implementation of the transmission line function that is not used and not convenient.

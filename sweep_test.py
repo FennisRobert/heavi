@@ -1,6 +1,6 @@
 import heavi as hv
 
-model = hv.Model()
+model = hv.Model(suppress_loadbar=True)
 
 p1 = model.port(50)
 p2 = model.port(50)
@@ -20,9 +20,12 @@ R2 = model.resistor(n1, p2, R2)
 
 C = model.capacitor(n1, model.gnd, C3)
 
-f = hv.frange(1e6, 10e9,1001)
+f = hv.frange(1e6, 10e9,10_001)
 
+Ss = []
 for index in sweep.iterate():
     S = model.run_sparameter_analysis(f)
-    hv.plot_s_parameters(f, [S.S11, S.S21], labels=["S11", "S21"], linestyles=["-","-"], colorcycle=[0,1])
+    Ss.append(S.S21)
+
+hv.plot_s_parameters(f, Ss)
 
