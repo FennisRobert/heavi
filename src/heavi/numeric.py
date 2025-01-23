@@ -56,6 +56,7 @@ class SimValue:
 class Negative(SimValue):
 
     def __init__(self, value: SimValue):
+        super().__init__()
         self._value: SimValue = value
 
     def __repr__(self) -> str:
@@ -69,6 +70,7 @@ class Negative(SimValue):
 class Inverse(SimValue):
     
     def __init__(self, value: SimValue):
+        super().__init__()
         self._value: SimValue = value
 
     def __repr__(self) -> str:
@@ -86,6 +88,7 @@ class Inverse(SimValue):
 class Function(SimValue):
 
     def __init__(self, function: Callable[[np.ndarray], np.ndarray]):
+        super().__init__()
         self._function = function
 
     def __repr__(self) -> str:
@@ -104,6 +107,7 @@ class Function(SimValue):
 class Random(SimValue):
 
     def __init__(self, randomizer: Callable):
+        super().__init__()
         self._randomizer = randomizer
         self._value = Uninitialized()
 
@@ -125,6 +129,7 @@ class Random(SimValue):
 class Param(SimValue):
 
     def __init__(self, values: np.ndarray):
+        super().__init__()
         self._values = values
         self._index: int = 0
         self._value = Uninitialized()
