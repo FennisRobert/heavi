@@ -896,6 +896,7 @@ class Network:
             nodes: list[Node],
             Sparam: list[list[Callable]],
             Z0: float,
+            component_type: ComponentType = ComponentType.NPORT
     ) -> None:
         """Adds an N-port S-parameter component to the circuit.
 
@@ -931,7 +932,7 @@ class Network:
                 Y2[N,i,:] = -np.sum(Y[:,i,:],axis=0)
                 Y2[N,N,:] += np.sum(Y[i,:,:],axis=0)
             return Y2
-        component = Component(nodes + [gnd, ],[ComponentFunction(nodes + [gnd, ],Function(comp_function),True),],ComponentType.NPORT, Z0 )
+        component = Component(nodes + [gnd, ],[ComponentFunction(nodes + [gnd, ],Function(comp_function),True),],component_type, Z0 )
         self.components.append(component)
 
     def n_port_Y(
@@ -940,6 +941,7 @@ class Network:
             nodes: list[Node],
             Yparams: list[list[Callable]],
             Z0: float,
+            component_type: ComponentType = ComponentType.NPORT
     ) -> None:
         """Adds an N-port Y-parameter component to the circuit.
 
@@ -973,7 +975,7 @@ class Network:
                 Y2[N,i,:] = -np.sum(Y[:,i,:],axis=0)
                 Y2[N,N,:] += np.sum(Y[i,:,:],axis=0)
             return Y2
-        component = Component(nodes + [gnd, ],[ComponentFunction(nodes + [gnd, ],Function(comp_function),True),],ComponentType.NPORT, Z0 )
+        component = Component(nodes + [gnd, ],[ComponentFunction(nodes + [gnd, ],Function(comp_function),True),],component_type, Z0 )
         self.components.append(component)
     
     
