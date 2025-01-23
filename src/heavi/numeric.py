@@ -50,7 +50,7 @@ class SimParam:
     def inverse(self) -> SimValue:
         return SimValue(1/self._value)
     
-class SimValue:
+class SimValue(SimParam):
 
     def __init__(self, value: float):
         super().__init__()
