@@ -26,7 +26,7 @@ TEN_POWERS = {
 }
 
 def _get_power(number: float):
-    tp = np.log10(number)
+    tp = np.log10(np.abs(number))
     v = np.floor(tp / 3) * 3
     v = min(12, max(-12, v))
     v2 = number / (10**v)
