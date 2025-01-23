@@ -23,12 +23,9 @@ class Uninitialized:
     def __sub__(self, other):
         raise ValueError("Uninitialized value") 
     
+class SimParam:
 
-    
-class SimValue:
-
-    def __init__(self, value: float):
-        self._value = value
+    def __init__(self):
         self._eval_f = 1e9
 
     @property
@@ -36,7 +33,7 @@ class SimValue:
         return self(self._eval_f)
     
     def scalar(self) -> float:
-        return self(self._eval_fs)
+        return self(self._eval_f)
     
     def initialize(self) -> None:
         pass
@@ -45,7 +42,7 @@ class SimValue:
         return np.ones_like(f) * self._value
     
     def __repr__(self) -> str:
-        return f"SimValue({self._value})"
+        return f"SimParam({self._value})"
     
     def negative(self) -> SimValue:
         return SimValue(-self._value)
@@ -53,7 +50,17 @@ class SimValue:
     def inverse(self) -> SimValue:
         return SimValue(1/self._value)
     
-class Negative(SimValue):
+class SimValue:
+
+    def __init__(self, value: float):
+        super().__init__()
+        self._value = value
+
+    def __repr__(self) -> str:
+        return f"SimValue({self._value})"
+    
+    
+class Negative(SimParam):
 
     def __init__(self, value: SimValue):
         super().__init__()
@@ -67,7 +74,7 @@ class Negative(SimValue):
     def negative(self) -> SimValue:
         return self._value
 
-class Inverse(SimValue):
+class Inverse(SimParam):
     
     def __init__(self, value: SimValue):
         super().__init__()
@@ -85,7 +92,7 @@ class Inverse(SimValue):
     def inverse(self) -> SimValue:
         return self._value
     
-class Function(SimValue):
+class Function(SimParam):
 
     def __init__(self, function: Callable[[np.ndarray], np.ndarray]):
         super().__init__()
@@ -104,7 +111,7 @@ class Function(SimValue):
         return Function(lambda f: 1/self._function(f))
     
     
-class Random(SimValue):
+class Random(SimParam):
 
     def __init__(self, randomizer: Callable):
         super().__init__()
@@ -126,7 +133,7 @@ class Random(SimValue):
     def inverse(self) -> SimValue:
         return Inverse(self)
     
-class Param(SimValue):
+class Param(SimParam):
 
     def __init__(self, values: np.ndarray):
         super().__init__()
