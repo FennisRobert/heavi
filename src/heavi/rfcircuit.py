@@ -11,7 +11,7 @@ from numba_progress.progress import ProgressBarType
 from loguru import logger
 
 from .sparam import Sparameters
-from .numeric import SimValue, parse_numeric, Function
+from .numeric import Scalar, parse_numeric, Function
 
 TEN_POWERS = {
     -12: "p",
@@ -280,7 +280,7 @@ class Node:
 class ComponentFunction:
     """ ComponentFunction class for the Component object. """
     node_list: list[Node]
-    simval: SimValue
+    simval: Scalar
     as_matrix: bool = False
 
     @property
@@ -312,13 +312,13 @@ class Component:
 
     """
     def __init__(
-        self, nodes, functionlist, type: ComponentType = ComponentType.UNDEFINED, component_value: SimValue = None
+        self, nodes, functionlist, type: ComponentType = ComponentType.UNDEFINED, component_value: Scalar = None
     ):
         self.nodes: list[Node] = nodes
         self.functionlist: list[ComponentFunction] = functionlist
         self.type: ComponentType = type
-        self._component_value: SimValue = parse_numeric(component_value)
-        self._impedance: SimValue = None
+        self._component_value: Scalar = parse_numeric(component_value)
+        self._impedance: Scalar = None
 
     @property
     def _display_value(self) -> float:
@@ -352,7 +352,7 @@ class Terminal:
         return self.source.nodes
 
     @property
-    def z_source(self) -> SimValue:
+    def z_source(self) -> Scalar:
         return self.source_impedance._impedance
 
 
@@ -506,7 +506,7 @@ class Network:
         return Sparameters(Sol, frequencies)
     
 
-    def current_source(self, node_from: Node, node_to: Node, current: float | SimValue) -> Component:
+    def current_source(self, node_from: Node, node_to: Node, current: float | Scalar) -> Component:
         """
         Adds a current source between two nodes in the circuit.
 
@@ -527,7 +527,7 @@ class Network:
         self.sources.append(current_source_obj)
         return current_source_obj
 
-    def terminal(self, signal_node: Node, Z0: float | SimValue, gnd_node: Node = None) -> Terminal:
+    def terminal(self, signal_node: Node, Z0: float | Scalar, gnd_node: Node = None) -> Terminal:
         """ Adds a terminal to the network and returns the created terminal object.
         Parameters:
         -----------
@@ -826,7 +826,7 @@ class Network:
         self.components.append(transmissionline_component)
         return transmissionline_component
 
-    def TL(self, node1: Node, node2: Node, beta: float | SimValue, length: float | SimValue, Z0: float | SimValue):
+    def TL(self, node1: Node, node2: Node, beta: float | Scalar, length: float | Scalar, Z0: float | Scalar):
         beta = parse_numeric(beta)
         length = parse_numeric(length)
         Z0 = parse_numeric(Z0)

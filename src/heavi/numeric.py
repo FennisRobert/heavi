@@ -32,6 +32,10 @@ class SimParam:
     def value(self) -> float:
         return self(self._eval_f)
     
+    def _adopt_f(self, other: SimParam) -> SimParam:
+        self._eval_f = other._eval_f
+        return self
+    
     def scalar(self) -> float:
         return self(self._eval_f)
     
@@ -44,13 +48,13 @@ class SimParam:
     def __repr__(self) -> str:
         return f"SimParam({self._value})"
     
-    def negative(self) -> SimValue:
-        return SimValue(-self._value)
+    def negative(self) -> SimParam:
+        return Function(lambda f: -self(f))._adopt_f(self)
     
-    def inverse(self) -> SimValue:
-        return SimValue(1/self._value)
+    def inverse(self) -> SimParam:
+        return Function(lambda f: 1/self(f))._adopt_f(self)
     
-class SimValue(SimParam):
+class Scalar(SimParam):
 
     def __init__(self, value: float):
         super().__init__()
@@ -59,26 +63,32 @@ class SimValue(SimParam):
     def __repr__(self) -> str:
         return f"SimValue({self._value})"
     
+    def negative(self) -> Scalar:
+        return Scalar(-self._value)._adopt_f(self)
+    
+    def inverse(self) -> Scalar:
+        return Scalar(1/self._value)._adopt_f(self)
     
 class Negative(SimParam):
 
-    def __init__(self, value: SimValue):
+    def __init__(self, value: Scalar):
         super().__init__()
-        self._value: SimValue = value
+        self._value: Scalar = value
 
     def __repr__(self) -> str:
         return f"Negative({self._value})"
+    
     def __call__(self, f: np.ndarray) -> np.ndarray:
         return -self._value(f)
     
-    def negative(self) -> SimValue:
+    def negative(self) -> Scalar:
         return self._value
 
 class Inverse(SimParam):
     
-    def __init__(self, value: SimValue):
+    def __init__(self, value: Scalar):
         super().__init__()
-        self._value: SimValue = value
+        self._value: Scalar = value
 
     def __repr__(self) -> str:
         return f"Inverse({self._value})"
@@ -86,10 +96,7 @@ class Inverse(SimParam):
     def __call__(self, f: np.ndarray) -> np.ndarray:
         return 1/self._value(f)
     
-    def negative(self) -> SimValue:
-        return Negative(self)
-    
-    def inverse(self) -> SimValue:
+    def inverse(self) -> Scalar:
         return self._value
     
 class Function(SimParam):
@@ -103,13 +110,6 @@ class Function(SimParam):
     
     def __call__(self, f: np.ndarray) -> np.ndarray:
         return self._function(f)
-    
-    def negative(self) -> SimValue:
-        return Function(lambda f: -self._function(f))
-
-    def inverse(self) -> SimValue:
-        return Function(lambda f: 1/self._function(f))
-    
     
 class Random(SimParam):
 
@@ -127,11 +127,11 @@ class Random(SimParam):
     def __call__(self, f):
         return self._value * np.ones_like(f)
     
-    def negative(self) -> SimValue:
-        return Negative(self)
+    def negative(self) -> SimParam:
+        return Negative(self)._adopt_f(self)
     
-    def inverse(self) -> SimValue:
-        return Inverse(self)
+    def inverse(self) -> SimParam:
+        return Inverse(self)._adopt_f(self)
     
 class Param(SimParam):
 
@@ -165,11 +165,11 @@ class Param(SimParam):
     def initialize(self):
         self._value = self._values[self._index]
     
-    def negative(self) -> SimValue:
-        return Negative(self)
+    def negative(self) -> SimParam:
+        return Negative(self)._adopt_f(self)
     
-    def inverse(self) -> SimValue:
-        return Inverse(self)
+    def inverse(self) -> SimParam:
+        return Inverse(self)._adopt_f(self)
     
 class ParameterSweep:
 
@@ -248,8 +248,8 @@ class MonteCarlo:
                 random.initialize()
             yield i
     
-def parse_numeric(value: float | SimValue | Callable, inverse: bool = False) -> SimValue:
-    if isinstance(value, SimValue):
+def parse_numeric(value: float | Scalar | Callable, inverse: bool = False) -> SimParam:
+    if isinstance(value, SimParam):
         if inverse:
             return value.inverse()
         return value
@@ -259,7 +259,7 @@ def parse_numeric(value: float | SimValue | Callable, inverse: bool = False) -> 
         return Function(value)
     elif isinstance(value, (int, float, complex)):
         if inverse:
-            SimValue(1/value)
-        return SimValue(value)
+            Scalar(1/value)
+        return Scalar(value)
     else:
         raise ValueError(f"Invalid value type: {type(value)}")
