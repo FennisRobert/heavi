@@ -29,13 +29,14 @@ class SimValue:
 
     def __init__(self, value: float):
         self._value = value
+        self._eval_f = 1e9
 
     @property
     def value(self) -> float:
-        return self(1)
+        return self(self._eval_f)
     
     def scalar(self) -> float:
-        return self(1)
+        return self(self._eval_fs)
     
     def initialize(self) -> None:
         pass
