@@ -24,17 +24,11 @@ class Uninitialized:
         raise ValueError("Uninitialized value") 
     
 class SimParam:
-
-    def __init__(self):
-        self._eval_f = 1e9
+    _eval_f = 1e9
 
     @property
     def value(self) -> float:
         return self(self._eval_f)
-    
-    def _adopt_f(self, other: SimParam) -> SimParam:
-        self._eval_f = other._eval_f
-        return self
     
     def scalar(self) -> float:
         return self(self._eval_f)
@@ -49,30 +43,28 @@ class SimParam:
         return f"SimParam({self._value})"
     
     def negative(self) -> SimParam:
-        return Function(lambda f: -self(f))._adopt_f(self)
+        return Function(lambda f: -self(f))
     
     def inverse(self) -> SimParam:
-        return Function(lambda f: 1/self(f))._adopt_f(self)
+        return Function(lambda f: 1/self(f))
     
 class Scalar(SimParam):
 
     def __init__(self, value: float):
-        super().__init__()
         self._value = value
 
     def __repr__(self) -> str:
         return f"SimValue({self._value})"
     
     def negative(self) -> Scalar:
-        return Scalar(-self._value)._adopt_f(self)
+        return Scalar(-self._value)
     
     def inverse(self) -> Scalar:
-        return Scalar(1/self._value)._adopt_f(self)
+        return Scalar(1/self._value)
     
 class Negative(SimParam):
 
     def __init__(self, value: Scalar):
-        super().__init__()
         self._value: Scalar = value
 
     def __repr__(self) -> str:
@@ -87,7 +79,6 @@ class Negative(SimParam):
 class Inverse(SimParam):
     
     def __init__(self, value: Scalar):
-        super().__init__()
         self._value: Scalar = value
 
     def __repr__(self) -> str:
@@ -102,7 +93,6 @@ class Inverse(SimParam):
 class Function(SimParam):
 
     def __init__(self, function: Callable[[np.ndarray], np.ndarray]):
-        super().__init__()
         self._function = function
 
     def __repr__(self) -> str:
@@ -128,10 +118,10 @@ class Random(SimParam):
         return self._value * np.ones_like(f)
     
     def negative(self) -> SimParam:
-        return Negative(self)._adopt_f(self)
+        return Negative(self)
     
     def inverse(self) -> SimParam:
-        return Inverse(self)._adopt_f(self)
+        return Inverse(self)
     
 class Param(SimParam):
 
@@ -166,10 +156,10 @@ class Param(SimParam):
         self._value = self._values[self._index]
     
     def negative(self) -> SimParam:
-        return Negative(self)._adopt_f(self)
+        return Negative(self)
     
     def inverse(self) -> SimParam:
-        return Inverse(self)._adopt_f(self)
+        return Inverse(self)
     
 class ParameterSweep:
 
