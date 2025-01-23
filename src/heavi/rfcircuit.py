@@ -849,7 +849,7 @@ class Network:
         def y22(f):
             return a11(f)/a12(f)
         
-        self.n_port_Y(self.gnd, [node1, node2], [[y11, y12], [y21, y22]], Z0)
+        self.n_port_Y(self.gnd, [node1, node2], [[y11, y12], [y21, y22]], Z0, component_type=ComponentType.TRANSMISSIONLINE)
 
     def two_port_reciprocal(
         self,
