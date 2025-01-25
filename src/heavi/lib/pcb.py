@@ -1,6 +1,8 @@
 
 import numpy as np
 from enum import Enum
+from ..component import BaseComponent
+from ..rfcircuit import ComponentType, Network
 from scipy.optimize import root_scalar
 
 def coth(x):
@@ -57,8 +59,7 @@ def _w_from_z0_stripline(targetZ0: float, h: float, er: float, t: float):
     
     return root_scalar(f, bracket=[0.001, 10], xtol=0.006).root
 
-from ..component import BaseComponent
-from ..rfcircuit import ComponentType, Network
+
 
 class PCBStack:
 

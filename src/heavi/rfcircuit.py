@@ -270,12 +270,22 @@ def compute_s_parameters_no_loadbar(Is, Ys, Zs, port_indices, frequencies):
 class Node:
     """ Node class for the Network object. """
     name: str
-    index: int = None
+    _index: int = None
     _parent: Network = None
+    _linked: Node = None
 
     def __hash__(self):
         return hash(f'{self.name}_{self.index}')
     
+    def set_index(self, index: int):
+        self._index = index
+
+    @property
+    def index(self) -> int:
+        if self._linked is not None:
+            return self._linked.index
+        return self._index
+
 @dataclass
 class ComponentFunction:
     """ ComponentFunction class for the Component object. """
@@ -377,6 +387,7 @@ class Network:
         self.node_counter: defaultdict[str, int] = defaultdict(int)
         self.node_default_name: str = default_name
         self.suppress_loadbar: bool = suppress_loadbar
+        
 
     def print_components(self) -> None:
         '''Prints an overview of the components in the Network'''
@@ -395,7 +406,7 @@ class Network:
     def _compile_nodes(self) -> None:
         '''_compile_nodes writes an index number to the node's index field required for matrix lookup.'''
         for i, node in enumerate(self.nodes):
-            node.index = i
+            node.set_index(i)
 
     def _new_node_name(self, basename: str = None) -> str:
         '''Generates a node name label to be used by checking which ones exist and then generating a new one.'''
@@ -455,8 +466,11 @@ class Network:
                 logger.error("Unconnected nodes will cause the analysis to yield 0 values.")
                 raise ValueError(f"Node {node.name} is not connected to any components.")
         
-
     def run_sparameter_analysis(self, frequencies: np.ndarray) -> Sparameters:
+        logger.warning("run_sparameter_analysis will be deprecated. Use run instead.")
+        return self.run(frequencies)
+
+    def run(self, frequencies: np.ndarray) -> Sparameters:
         """
         Runs an S-parameter analysis for the network at the specified frequencies.
 

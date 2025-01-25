@@ -253,3 +253,14 @@ def parse_numeric(value: float | Scalar | Callable, inverse: bool = False) -> Si
         return Scalar(value)
     else:
         raise ValueError(f"Invalid value type: {type(value)}")
+    
+def set_print_frequency(frequency: float) -> None:
+    # check if frequency is a float with a valid value
+    if not isinstance(frequency, (int, float)):
+        raise ValueError("Frequency must be a float")
+    
+    # check if it is greater than 0 and less than the upper frequency of the optical region
+    if 0 < frequency < 1e15:
+        raise ValueError("Frequency must be greater than 0 and less than 1e15 Hz")
+    
+    SimParam._eval_f = frequency
