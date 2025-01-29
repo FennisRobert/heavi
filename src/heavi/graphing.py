@@ -44,7 +44,17 @@ def hintersections(x, y, level):
     return xcross + xlevel
 
 
-def plot(x, y):
+def plot(x: np.ndarray, y: np.ndarray) -> None:
+    """Simple wrapper for an x-y plot
+
+    Parameters
+    ----------
+    x : np.ndarray
+        x-axis values
+    y : np.ndarray
+        y-axis values
+    """
+
     fig, ax = plt.subplots()
     ax.plot(x, y)
     ax.grid()
@@ -59,13 +69,44 @@ def plot_s_parameters(f, S, dblim=[-80, 5],
                levelindicator: int | float =None, 
                noise_floor=-150, 
                fill_areas: list[tuple]= None, 
+               spec_area: list[tuple[float]] = None,
                unwrap_phase=False, 
                logx: bool = False,
                labels: list[str] = None,
                linestyles: list[str] = None,
-               colorcycle: list[int] = None):
+               colorcycle: list[int] = None,
+               filename: str = None,
+               show_plot: bool = True):
     
-
+    """Plot S-parameters in a rectangular plot.
+    
+    Parameters
+    ----------
+    f : np.ndarray
+        Frequency vector
+    S : np.ndarray
+        S-parameters to plot
+    dblim : list, optional
+        Magnitude plot limits, by default [-80, 5]
+    xunit : str, optional
+        Frequency unit, by default "GHz"
+    levelindicator : int, optional
+        Level indicator, by default None
+    noise_floor : int, optional
+        Noise floor, by default -150
+    fill_areas : list, optional
+        Areas to fill, by default None
+    unwrap_phase : bool, optional
+        Unwrap phase, by default False
+    logx : bool, optional
+        Logarithmic x-axis, by default False
+    labels : list, optional
+        Labels for the plot, by default None
+    linestyles : list, optional
+        Linestyles for the plot, by default None
+    colorcycle : list, optional
+        Color cycle for the plot, by default None
+    """
     if not isinstance(S, list):
         Ss = [S]
     else:
@@ -115,6 +156,11 @@ def plot_s_parameters(f, S, dblim=[-80, 5],
             f2 = fmax / unitdivider[xunit]
             ax_mag.fill_between([f1, f2], dblim[0], dblim[1], color='grey', alpha= 0.2)
             ax_phase.fill_between([f1, f2], minphase, maxphase, color='grey', alpha= 0.2)
+    if spec_area is not None:
+        for fmin, fmax, vmin, vmax in spec_area:
+            f1 = fmin / unitdivider[xunit]
+            f2 = fmax / unitdivider[xunit]
+            ax_mag.fill_between([f1, f2], vmin,vmax, color='red', alpha=0.2)
     # Configure magnitude plot (ax_mag)
     ax_mag.set_ylabel("Magnitude (dB)")
     ax_mag.set_xlabel(f"Frequency ({xunit})")
@@ -134,48 +180,7 @@ def plot_s_parameters(f, S, dblim=[-80, 5],
     if labels is not None:
         ax_mag.legend(labels)
         ax_phase.legend(labels)
-    plt.show()
-
-def plotSparam_OLD(f, S, dblim=[-80, 5], xunit="GHz", levelindicator=False, noise_floor=-90):
-
-    if not isinstance(S, list):
-        Ss = [S]
-    else:
-        Ss = S
-
-    unitdivider = {"MHz": 1e6, "GHz": 1e9, "kHz": 1e3}
-
-    fnew = f / unitdivider[xunit]
-    fig, ax = plt.subplots()
-    for s in Ss:
-        SdB = 20 * np.log10(np.abs(s)+10**(noise_floor/20)*np.random.rand(*s.shape)+10**((noise_floor-30)/20))
-
-        ax.plot(fnew, SdB)
-        if isinstance(levelindicator, (int, float, complex)):
-            lvl = levelindicator
-            fcross = hintersections(fnew, SdB, lvl)
-            for fs in fcross:
-                ax.annotate(
-                    f"{str(fs)[:4]}{xunit}",
-                    xy=(fs, lvl),
-                    xytext=(fs + 0.08 * (max(f) - min(f)) / unitdivider[xunit], lvl),
-                    arrowprops=dict(facecolor="black", width=1, headwidth=5),
-                )
-        ax.xaxis.set_minor_locator(tck.AutoMinorLocator(2))
-        ax.yaxis.set_minor_locator(tck.AutoMinorLocator(2))
-        plt.axis([min(fnew), max(fnew), dblim[0], dblim[1]])
-        ax.axhline(y=0, color="k", linewidth=1)
-
-    plt.show()
-
-
-def histogram(data, nbins=20):
-    n, bins, patches = plt.hist(data, nbins, density=True, facecolor="g", alpha=0.75)
-    print(n, bins, patches)
-    plt.xlabel("Values")
-    plt.ylabel("Probability")
-    # plt.text(60, .025, r'$\mu=100,\ \sigma=15$')
-    # plt.xlim(40, 160)
-    # plt.ylim(0, 0.03)
-    plt.grid(True)
-    plt.show()
+    if show_plot:
+        plt.show()
+    if filename is not None:
+        fig.savefig(filename)

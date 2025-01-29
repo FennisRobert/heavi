@@ -49,7 +49,7 @@ class SMDResistor(BaseComponent):
             The package size of the SMD resistor (e.g., 0402, 0603, etc.).
         """
         super().__init__()
-        
+        self.n_nodes = 2
         self.resistance = resistance
         
         # Typical empirical parasitic values (approximate):
@@ -118,7 +118,7 @@ class SMDInductor(BaseComponent):
             The package size of the SMD inductor (e.g. 0402, 0603, etc.).
         """
         super().__init__()
-        
+        self.n_nodes = 2
         self.inductance = inductance
         
         # Typical parasitic values (approximate)
@@ -205,7 +205,7 @@ class SMDCapacitor(BaseComponent):
             The package size of the SMD capacitor (e.g., 0402, 0603, etc.).
         """
         super().__init__()
-        
+        self.n_nodes = 2
         self.capacitance = capacitance
         
         # Typical parasitic values (approximate)

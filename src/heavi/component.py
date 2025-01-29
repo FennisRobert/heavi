@@ -1,14 +1,21 @@
 from __future__ import annotations
 from .rfcircuit import Network, Node
 
+
+
 class BaseComponent:
 
     def __init__(self):
         self.network: Network = None
         self.nodes: dict[int, Node] = {}
         self.gnd: Node = None
-
+        self.n_nodes: int = 0
+    
     def __validate__(self):
+        # Check if number of nodes > 0
+        if self.n_nodes == 0:
+            raise ValueError("The component must have at least one node.")
+        
         # Check if self.network is a Network object
         if not isinstance(self.network, Network):
             raise ValueError("The component must be connected to a Network object.")
@@ -26,7 +33,6 @@ class BaseComponent:
                 raise ValueError("The ground must be a Node object.")
             if self.gnd._parent != self.network:
                 raise ValueError("The ground node must belong to the same Network object.")
-        
 
     def __on_connect__(self):
         raise NotImplementedError("This method must be implemented in the child class.")
@@ -52,6 +58,8 @@ class BaseComponent:
             if isinstance(node, Node):
                 self.network = node._parent
         
+        if self.gnd is None:
+            self.gnd = self.network.gnd
         self.__validate__()
         self.__on_connect__()
         return self

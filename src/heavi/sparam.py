@@ -16,13 +16,13 @@ class Sparameters:
         ----------
         S : np.ndarray
             Scattering matrix of shape (nports, nports, nfreqs)"""
-        self._S = S
-        self.f = f
-        self.nports = S.shape[0]
-        self.nfreqs = S.shape[2]
+        self._S: np.ndarray = S
+        self.f: float = f
+        self.nports: int = S.shape[0]
+        self.nfreqs: int = S.shape[2]
     
     def S(self, p1: int, p2: int):
-        """Get S-parameter"""
+        """Get S-parameter S[p1, p2] counting from 1, S(1,1) is S11"""
         # check if p1 and p2 are valid ports
         if p1 < 1 or p1 > self.nports:
             raise ValueError(f"Port {p1} out of range")

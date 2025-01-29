@@ -1,6 +1,51 @@
-# This file will do lots of stochastic stuff.
+
+from ..component import BaseComponent
+from ..numeric import Random, SimParam, MonteCarlo
+from ..transformations import VSWR_to_S11, Z_to_S11
+import numpy as np
 
 
+class TransmissionLine(BaseComponent):
+
+    def __init__(self, 
+                 mcsim: MonteCarlo,
+                 length: float, 
+                 Z0: float,
+                 VSWR: float = 1,
+                 er: float = 1,
+                 attenuation: float = 0,
+                 phase_stability: float = 0,
+                 amplitude_stability: float = 0,
+                 Z0_error: float = 0,
+                 nsigma: float = 3,
+                 ):
+        super().__init__()
+        self.n_nodes = 2
+        self.mc: MonteCarlo = mcsim
+
+        def kz(f):
+            return 2*np.pi*f/(299792458)*np.sqrt(er)
+        
+        A = mcsim.uniform(1, VSWR)
+        B = mcsim.uniform(0, 2*np.pi)
+        C = mcsim.gaussian(Z0, Z0_error/nsigma)
+        D = mcsim.gaussian(0,amplitude_stability/nsigma)
+        E = mcsim.gaussian(0,phase_stability/nsigma)
+        self.fS11 = lambda f: np.exp(1j*B(f))*VSWR_to_S11(A(f))*Z_to_S11(C(f), Z0)
+        self.fS21 = lambda f: (((1-self.fS11(f)**2)**(0.5))*10**(-(attenuation*length)/20) 
+                               * (10**(D(f)/20)) 
+                               * np.exp(1j*(kz(f)*length+E(f)*np.pi/180)))
+        self.fS12 = self.fS21
+        self.fS22 = self.fS11
+        self.Z0 = Z0
+        
+    def __on_connect__(self):
+        
+        
+        self.network.n_port_S(self.gnd, [self.node(1), self.node(2)], 
+                              [[self.fS11, self.fS12], [self.fS21, self.fS22]], 
+                              self.Z0)
+        
 
 # def random_transmissionline(self, gnd: Node, port1: Node, port2: Node, 
                                 

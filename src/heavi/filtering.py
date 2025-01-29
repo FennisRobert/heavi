@@ -18,11 +18,34 @@ def odd(x):
     return False
 
 class FilterType(Enum):
+    """Filter type enumeration.
+    This enumeration is used to specify the type of filter to create.
+    
+    constants:
+    -----------
+    CHEBYCHEV : int
+        Chebyshev filter.
+    BUTTERWORTH : int
+    """
     CHEBYCHEV = 1
     BUTTERWORTH = 2
 
 
 class BandType(Enum):
+    """Band type enumeration.
+    This enumeration is used to specify the type of band to create.
+    
+    constants:
+    -----------
+    HIGHPASS : int
+        Highpass filter.
+    LOWPASS : int
+        Lowpass filter.
+    BANDPASS : int
+        Bandpass filter.
+    BANDSTOP : int
+        Bandstop filter.
+    """
     HIGHPASS = 1
     LOWPASS = 2
     BANDPASS = 3
@@ -30,8 +53,161 @@ class BandType(Enum):
 
 
 class CauerType(Enum):
+    """Cauer type enumeration.
+
+    constants:
+    -----------
+    TYPE1 : int
+        Type 1 Passband ripple
+    TYPE2 : int
+        Type 2 Stopband ripple
+
+    """
     TYPE1 = 1
     TYPE2 = 2
+
+
+def prototype_chebychev(order: int, ripple: float) -> tuple[np.ndarray, float]:
+    """Generates the Chebyshev prototype filter G-coefficients.
+
+    Parameters
+    ----------
+    order : int
+        The order of the filter.
+    ripple : float
+        The ripple factor in dB.
+
+    Returns
+    -------
+    tuple
+        A tuple containing the G-coefficients and the load impedance scaler
+    
+    """
+    N = order
+    
+    Gk = [i for i in range(N + 2)]
+    Ak = [i for i in range(N + 2)]
+    Bk = [i for i in range(N + 2)]
+
+    B = np.log(1 / np.tanh(ripple * np.log(10) / 40))
+    y = np.sinh(B / (2 * N))
+
+    for k in Gk:
+        Ak[k] = np.sin((2 * k - 1) * np.pi / (2 * N))
+        Bk[k] = y**2 + np.sin(k * np.pi / N) ** 2
+        if k == 0:
+            Gk[k] = 1
+        elif k == 1:
+            Gk[k] = 2 * Ak[1] / y
+        elif k <= N:
+            Gk[k] = 4 * Ak[k - 1] * Ak[k] / (Bk[k - 1] * Gk[k - 1])
+        elif k == N + 1:
+            if k % 2 == 0:
+                Gk[k] = 1
+            else:
+                Gk[k] = 1 / np.tanh(B / 4) ** 2
+    return Gk[1:-1], Gk[-1]
+
+
+def prototype_butterworth(order: int) -> tuple[np.ndarray, float]:
+    """Generates the Butterworth prototype filter G-coefficients.
+    
+    Parameters
+    ----------
+    order : int
+        The order of the filter.
+    
+    Returns
+    -------
+    tuple
+        A tuple containing the G-coefficients and the load impedance scaler (for generality, the scaler is always 1)
+    
+    """
+
+    N = order
+    Gk = [i + 1 for i in range(N)]
+
+    for i in Gk:
+        Gk[i - 1] = 2 * np.sin(np.pi * (2 * i - 1) / (2 * N))
+
+    return Gk, 1
+
+
+def gen_cheb_poly(n: int):
+    """Generates the nth order Chebyshev polynomial."""
+    x = sym.symbols('x')
+    if n==0:
+        output = 1
+    elif n==1:
+        T1 = x
+        output = T1
+    else:
+        Tnm1 = x
+        Tnm2 = 1
+        Tn = 1
+        for n in range(n-1):
+            Tn = 2*x*Tnm1-Tnm2
+            Tnm2 = Tnm1
+            Tnm1 = Tn
+        output = Tn
+    theta, secm = sym.symbols('theta secm')
+    output = sym.expand(output,x).subs(x,sym.cos(theta)*secm)
+    for i in range(n):
+        output = TR0(sym.expand(TR8(output)))
+    return sym.collect(output, theta, exact=None)
+
+def impedance_transformer_cheb(Z1: float, Z2: float, A: float, N: int):
+    """Generates the impedances for an impedance transformer using Chebyshev polynomials.
+    
+    Parameters:
+    -----------
+    Z1 : float
+        The characteristic impedance of the first port.
+    Z2 : float
+        The characteristic impedance of the second port.
+    A : float
+        The ripple factor in dB.
+    N : int
+        The number of sections in the transformer.
+
+    """
+    theta = sym.symbols('theta')
+    func = 2
+    fout = 0
+    i = 0
+    for n in range(N//2+1):
+        Gs = sym.symbols(f'Gamma{i}')
+        fout = fout + func*Gs*sym.cos((N-n*2)*theta)
+        i = i+1
+    
+    cheb_poly = gen_cheb_poly(N)
+    gammas = []
+    cheb_poly_output = cheb_poly
+    gamma_poly_output = fout
+    for i in range(0,N//2+1):
+        mult = N-i*2
+        symbol = sym.Symbol(f'Gamma{i}')
+        T1 = fout.coeff(sym.cos(mult*theta))
+        T2 = A*cheb_poly.coeff(sym.cos(mult*theta))
+        if mult==0:
+            T1 = gamma_poly_output
+            T2 = A*cheb_poly_output*2
+        gamma = sym.solve(T1-T2, symbol)[0]
+        secmval = np.cosh(1/N*np.arccosh((1/(2*A))*np.log(Z2/Z1)))
+        gamma_val = gamma.subs(sym.Symbol('secm'), secmval)
+        gammas.append(gamma_val)
+        cheb_poly_output = cheb_poly_output - cheb_poly.coeff(sym.cos(mult*theta))*sym.cos(mult*theta)
+        gamma_poly_output = gamma_poly_output - fout.coeff(sym.cos(mult*theta))*sym.cos(mult*theta)
+    gammas = gammas + list(reversed(gammas))[((N+1)%2):]
+    impedances = [Z1,]
+    Zlast = Z1
+    for g in gammas[:-1]:
+        Zsec = Zlast*np.exp(2.0*float(g))
+        impedances.append(Zsec)
+        Zlast = Zsec
+    impedances.append(Z2)
+    return impedances
+
 
 class Filtering:
 
@@ -82,66 +258,6 @@ class Filtering:
         ------
         This function uses Chebyshev polynomials to design an impedance transformer with the specified parameters.
         """
-        def gen_cheb_poly(n: int):
-            x = sym.symbols('x')
-            if n==0:
-                output = 1
-            elif n==1:
-                T1 = x
-                output = T1
-            else:
-                Tnm1 = x
-                Tnm2 = 1
-                Tn = 1
-                for n in range(n-1):
-                    Tn = 2*x*Tnm1-Tnm2
-                    Tnm2 = Tnm1
-                    Tnm1 = Tn
-                output = Tn
-            theta, secm = sym.symbols('theta secm')
-            output = sym.expand(output,x).subs(x,sym.cos(theta)*secm)
-            for i in range(n):
-                output = TR0(sym.expand(TR8(output)))
-            return sym.collect(output, theta, exact=None)
-
-        def chebychev_impedances(Z1,Z2,A,N):
-            theta = sym.symbols('theta')
-            func = 2
-            fout = 0
-            i = 0
-            for n in range(N//2+1):
-                Gs = sym.symbols(f'Gamma{i}')
-                fout = fout + func*Gs*sym.cos((N-n*2)*theta)
-                i = i+1
-            
-            cheb_poly = gen_cheb_poly(N)
-            gammas = []
-            cheb_poly_output = cheb_poly
-            gamma_poly_output = fout
-            for i in range(0,N//2+1):
-                mult = N-i*2
-                symbol = sym.Symbol(f'Gamma{i}')
-                T1 = fout.coeff(sym.cos(mult*theta))
-                
-                T2 = A*cheb_poly.coeff(sym.cos(mult*theta))
-                if mult==0:
-                    T1 = gamma_poly_output
-                    T2 = A*cheb_poly_output*2
-                gamma = sym.solve(T1-T2, symbol)[0]
-                secmval = np.cosh(1/N*np.arccosh((1/(2*A))*np.log(Z2/Z1)))
-                gamma_val = gamma.subs(sym.Symbol('secm'), secmval)
-                gammas.append(gamma_val)
-                cheb_poly_output = cheb_poly_output - cheb_poly.coeff(sym.cos(mult*theta))*sym.cos(mult*theta)
-                gamma_poly_output = gamma_poly_output - fout.coeff(sym.cos(mult*theta))*sym.cos(mult*theta)
-            gammas = gammas + list(reversed(gammas))[((N+1)%2):]
-            impedances = [Z1,]
-            Zlast = Z1
-            for g in gammas[:-1]:
-                Zsec = Zlast*np.exp(2.0*float(g))
-                impedances.append(Zsec)
-                Zlast = Zsec
-            impedances.append(Z2)
-            return impedances
         
         if frange is not None:
             f1, f2 = frange
@@ -151,7 +267,7 @@ class Filtering:
             logger.info(f'Computed Ripple = {ripple}')
 
         l0 = 299792458/fc * 0.25 * (1/np.sqrt(er))
-        imps = chebychev_impedances(Z01, Z02, ripple, Nsections)[1:-1]
+        imps = impedance_transformer_cheb(Z01, Z02, ripple, Nsections)[1:-1]
         nodes = [self.N.named_node('TransformerNode') for i in range(len(imps)-1)]
 
         nodes = [port1, ] + nodes + [port2,]
@@ -314,44 +430,3 @@ class Filtering:
                     Inductors.append(Lser)
         return Capacitors, Inductors, LoadImpedanceScaler
     
-
-def prototype_chebychev(order, ripple):
-    N = order
-    # if order % 2 == 0:
-    #    N = N + 1
-
-    # one extra because the chebychev needs a zeroth element
-    Gk = [i for i in range(N + 2)]
-    Ak = [i for i in range(N + 2)]
-    Bk = [i for i in range(N + 2)]
-
-    B = np.log(1 / np.tanh(ripple * np.log(10) / 40))
-    y = np.sinh(B / (2 * N))
-
-    for k in Gk:
-        Ak[k] = np.sin((2 * k - 1) * np.pi / (2 * N))
-        Bk[k] = y**2 + np.sin(k * np.pi / N) ** 2
-        if k == 0:
-            Gk[k] = 1
-        elif k == 1:
-            Gk[k] = 2 * Ak[1] / y
-        elif k <= N:
-            Gk[k] = 4 * Ak[k - 1] * Ak[k] / (Bk[k - 1] * Gk[k - 1])
-        elif k == N + 1:
-            if k % 2 == 0:
-                Gk[k] = 1
-            else:
-                Gk[k] = 1 / np.tanh(B / 4) ** 2
-    return Gk[1:-1], Gk[-1]
-
-
-def prototype_butterworth(order):
-    N = order
-    # if order % 2 == 0:
-    #    N = N + 1
-    Gk = [i + 1 for i in range(N)]
-
-    for i in Gk:
-        Gk[i - 1] = 2 * np.sin(np.pi * (2 * i - 1) / (2 * N))
-
-    return Gk, 1

@@ -138,6 +138,12 @@ venv.bak/
 # mkdocs documentation
 /site
 
+# All filter results data
+/filtresults
+
+# Ignodred .txt files
+*_ig.txt
+
 # mypy
 .mypy_cache/
 .dmypy.json

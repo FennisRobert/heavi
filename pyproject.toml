@@ -13,7 +13,10 @@ dependencies = [
     "numpy (<2.2)",
     "matplotlib (<=3.9)",
     "loguru (>=0.7.3,<0.8.0)",
-    "sympy (>=1.13.3,<2.0.0)"
+    "sympy (>=1.13.3,<2.0.0)",
+    "numba-progress>=1.1.0",
+    "scipy>=1.15.1",
+    "schemdraw>=0.19",
 ]
 
 [project.optional-dependencies]

@@ -4,7 +4,7 @@ from typing import Callable, Generator
 from itertools import product
 
 class Uninitialized:
-
+    """A class to represent an uninitialized value"""
     def __init__(self):
         pass
 
@@ -31,24 +31,31 @@ class SimParam:
         return self(self._eval_f)
     
     def scalar(self) -> float:
+        """Returns the scalar value of the parameter"""
         return self(self._eval_f)
     
     def initialize(self) -> None:
+        """Initializes the parameter"""
         pass
 
     def __call__(self, f: np.ndarray) -> np.ndarray:
+        """Returns the value of the parameter at a given frequency"""
         return np.ones_like(f) * self._value
     
     def __repr__(self) -> str:
+        """Returns a string representation of the parameter"""
         return f"SimParam({self._value})"
     
     def negative(self) -> SimParam:
+        """Returns the negative of the parameter"""
         return Function(lambda f: -self(f))
     
     def inverse(self) -> SimParam:
+        """Returns the inverse of the parameter"""
         return Function(lambda f: 1/self(f))
     
 class Scalar(SimParam):
+    """A class to represent a scalar value"""
 
     def __init__(self, value: float):
         self._value = value
@@ -57,12 +64,15 @@ class Scalar(SimParam):
         return f"SimValue({self._value})"
     
     def negative(self) -> Scalar:
+        """Returns the negative of the scalar"""
         return Scalar(-self._value)
     
     def inverse(self) -> Scalar:
+        """Returns the inverse of the scalar"""
         return Scalar(1/self._value)
     
 class Negative(SimParam):
+    """A class to represent the negative of a parameter"""
 
     def __init__(self, value: Scalar):
         self._value: Scalar = value
@@ -74,6 +84,7 @@ class Negative(SimParam):
         return -self._value(f)
     
     def negative(self) -> Scalar:
+        """Returns the negative of the negative"""
         return self._value
 
 class Inverse(SimParam):
@@ -88,11 +99,19 @@ class Inverse(SimParam):
         return 1/self._value(f)
     
     def inverse(self) -> Scalar:
+        """Returns the inverse of the inverse"""
         return self._value
     
 class Function(SimParam):
 
     def __init__(self, function: Callable[[np.ndarray], np.ndarray]):
+        """A class to represent a function of frequency.
+        
+        Parameters:
+        -----------
+        function : Callable[[np.ndarray], np.ndarray]
+            The function of frequency.
+        """
         self._function = function
 
     def __repr__(self) -> str:
@@ -104,9 +123,18 @@ class Function(SimParam):
 class Random(SimParam):
 
     def __init__(self, randomizer: Callable):
+        """A class to represent a random value.
+        
+        Parameters:
+        -----------
+        randomizer : Callable
+            A function that returns a random value.
+        """
         super().__init__()
         self._randomizer = randomizer
         self._value = Uninitialized()
+        self._mean = None
+        self._std = None
 
     def initialize(self):
         self._value = self._randomizer()
@@ -124,7 +152,13 @@ class Random(SimParam):
         return Inverse(self)
     
 class Param(SimParam):
+    """ A class to represent a parameter that is swept over a range of values.
 
+    Parameters:
+    -----------
+    values : np.ndarray
+        An array of values to sweep over
+    """
     def __init__(self, values: np.ndarray):
         super().__init__()
         self._values = values
@@ -133,10 +167,12 @@ class Param(SimParam):
 
     @staticmethod
     def lin(start: float, stop: float, Nsteps: int) -> Param:
+        """Creates a linearly spaced parameter sweep."""
         return Param(np.linspace(start,stop,Nsteps))
     
     @staticmethod
     def range(start: float, stop: float, step: float, *args, **kwargs) -> Param:
+        """Creates a range of values with a given step size."""
         return Param(np.arange(start, stop, step, *args, **kwargs))
 
     def __len__(self):
@@ -150,6 +186,14 @@ class Param(SimParam):
         return self._value * np.ones_like(f)
     
     def set_index(self, index: int):
+        """Sets the index of the parameter.
+        
+        Parameters:
+        -----------
+        index : int
+            The index of the parameter.
+        """
+
         self._index = index
     
     def initialize(self):
@@ -170,13 +214,53 @@ class ParameterSweep:
         self._param_buffer: list = []
     
     def lin(self, start: float, stop: float) -> ParameterSweep:
+        """Adds a linear sweep of values to the parameter sweep.
+        
+        Parameters:
+        -----------
+        start : float
+            The start value of the sweep.
+        stop : float
+            The stop value of the sweep.
+        
+        Returns:
+        --------
+        ParameterSweep
+            The parameter sweep object.
+        """
+
         self._param_buffer.append((start,None,stop))
         return self
     
     def step(self, start: float, stepsize: float) -> ParameterSweep:
+        """Adds a stepped sweep of values to the parameter sweep.
+        
+        Parameters:
+        -----------
+        start : float
+            The start value of the sweep.
+        stepsize : float
+            The step size of the sweep.
+        
+        Returns:
+        --------
+        ParameterSweep
+            The parameter sweep object.
+        """
         self._param_buffer.append((start,stepsize,None))
 
     def add(self, N: int) -> tuple[Param]:
+        """Adds a dimension to the parameter sweep.
+        
+        Parameters:
+        -----------
+        N : int
+            The number of steps in the dimension.
+        
+        Returns:
+        --------
+        tuple[Param]
+            A tuple of Param objects."""
         params = []
         for start, step, stop in self._param_buffer:
             if step is None:
@@ -188,7 +272,7 @@ class ParameterSweep:
         return params
     
     def iterate(self) -> Generator[tuple[tuple[int], tuple[float]], None, None]:
-        '''An iterator that first compiles the total'''
+        '''An iterator that first compiles the total.'''
         # Make a list of all dimensional index tuples as the product of the lengths of each dimension
         total = 1
         for dimension in self.sweep_dimensions:
@@ -218,16 +302,46 @@ class ParameterSweep:
         self.sweep_dimensions.append(params)
 
 class MonteCarlo:
-
+    """A class to represent a Monte Carlo simulation."""
     def __init__(self):
         self._random_numbers: list[Random] = []
 
     def gaussian(self, mean: float, std: float) -> Random:
+        """Adds a Gaussian random number to the Monte Carlo simulation.
+        
+        Parameters:
+        -----------
+        mean : float
+            The mean of the Gaussian distribution.
+        std : float
+            The standard deviation of the Gaussian distribution.
+        
+        Returns:
+        --------
+        Random
+            A Random parameter object.
+        """
         random = Random(lambda: np.random.normal(mean, std))
+        random._mean = mean
+        random._std = std
         self._random_numbers.append(random)
         return random
     
     def uniform(self, low: float, high: float) -> Random:
+        """Adds a uniform random number to the Monte Carlo simulation.
+        
+        Parameters:
+        -----------
+        low : float
+            The lower bound of the uniform distribution.
+        high : float
+            The upper bound of the uniform distribution.
+        
+        Returns:
+        --------
+        Random
+            A Random parameter object.
+        """
         random = Random(lambda: np.random.uniform(low, high))
         self._random_numbers.append(random)
         return random
@@ -239,6 +353,20 @@ class MonteCarlo:
             yield i
     
 def parse_numeric(value: float | Scalar | Callable, inverse: bool = False) -> SimParam:
+    """Parses a numeric value to a SimParam object.
+
+    Parameters:
+    -----------
+    value : float | Scalar | Callable
+        The value to parse.
+    inverse : bool
+        Whether to return the inverse of the value.
+    
+    Returns:
+    --------
+    SimParam
+        The SimParam object.
+    """
     if isinstance(value, SimParam):
         if inverse:
             return value.inverse()
@@ -255,6 +383,13 @@ def parse_numeric(value: float | Scalar | Callable, inverse: bool = False) -> Si
         raise ValueError(f"Invalid value type: {type(value)}")
     
 def set_print_frequency(frequency: float) -> None:
+    """Sets the frequency at which the simulation parameters are evaluated for printing.
+    
+    Parameters:
+    -----------
+    frequency : float
+        The frequency at which the simulation parameters are evaluated.
+    """
     # check if frequency is a float with a valid value
     if not isinstance(frequency, (int, float)):
         raise ValueError("Frequency must be a float")
