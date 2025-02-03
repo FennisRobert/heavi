@@ -126,11 +126,14 @@ def plot_s_parameters(f, S, dblim=[-80, 5],
     fig.subplots_adjust(hspace=0.3)
 
     minphase, maxphase = -180, 180
+
+    maxy = 0
     for s, ls, cid in zip(Ss, linestyles, colorcycle):
         # Calculate and plot magnitude in dB
         SdB = 20 * np.log10(np.abs(s) + 10**(noise_floor/20) * np.random.rand(*s.shape) + 10**((noise_floor-30)/20))
         ax_mag.plot(fnew, SdB, label="Magnitude (dB)", linestyle=ls, color=_colors[cid % len(_colors)])
-
+        if np.max(SdB) > maxy:
+            maxy = np.max(SdB)
         # Calculate and plot phase in degrees
         phase = np.angle(s, deg=True)
         if unwrap_phase:
@@ -164,7 +167,7 @@ def plot_s_parameters(f, S, dblim=[-80, 5],
     # Configure magnitude plot (ax_mag)
     ax_mag.set_ylabel("Magnitude (dB)")
     ax_mag.set_xlabel(f"Frequency ({xunit})")
-    ax_mag.axis([min(fnew), max(fnew), dblim[0], dblim[1]])
+    ax_mag.axis([min(fnew), max(fnew), dblim[0], max(maxy*1.1,dblim[1])])
     ax_mag.axhline(y=0, color="k", linewidth=1)
     ax_mag.xaxis.set_minor_locator(tck.AutoMinorLocator(2))
     ax_mag.yaxis.set_minor_locator(tck.AutoMinorLocator(2))

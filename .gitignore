@@ -175,3 +175,10 @@ version_update.txt
 *_test.py
 
 _old_python_files/
+
+# All Sparam files
+touchstone_tests/
+*.s1p
+*.s2p
+*.s3p
+*.s4p
