@@ -7,9 +7,9 @@ from enum import Enum
 from abc import ABC, abstractmethod
 
 class OptimVar(SimParam):
-    """ Class for defining an optimization variable. 
+    """ Class for defining an optimisation variable. 
     
-    This class is used to define a variable that can be optimized. It is a subclass of SimParam, and can be used in the same way.
+    This class is used to define a variable that can be optimised. It is a subclass of SimParam, and can be used in the same way.
     
     Parameters
     ----------
@@ -36,9 +36,9 @@ class OptimVar(SimParam):
             return self.mapping(self._value)*np.ones_like(f)
 
 class PNorm(Enum):
-    """ Enum for defining the type of norm to use in the optimization.
+    """ Enum for defining the type of norm to use in the optimisation.
     
-    This enum is used to define the type of norm to use in the optimization. It can be used to specify the type of norm to use in the optimization.
+    This enum is used to define the type of norm to use in the optimisation. It can be used to specify the type of norm to use in the optimisation.
     
     Attributes
     ----------
@@ -148,7 +148,7 @@ def dBabove(dB_level: float,
 class Requirement(ABC):
     """ Abstract class for defining a requirement.
     
-    This class is used to define a requirement for an optimizer. It is an abstract class, and should be subclassed to define a specific requirement.
+    This class is used to define a requirement for an optimiser. It is an abstract class, and should be subclassed to define a specific requirement.
     
     """
     @abstractmethod
@@ -199,15 +199,15 @@ class FrequencyLevel(Requirement):
         return (self.fs[0], self.fs[-1], upper, lower)
 
 
-class Optimizer:
-    """ Class for defining an optimizer.
+class Optimiser:
+    """ Class for defining an optimiser.
     
-    This class is used to define an optimizer for a network. It is used to define the parameters to optimize, the requirements to meet, and the objective function to optimize.
+    This class is used to define an optimiser for a network. It is used to define the parameters to optimise, the requirements to meet, and the objective function to optimise.
     
     Parameters
     ----------
     network : Network
-        The network to optimize.
+        The network to optimise.
     
     """
     def __init__(self, network: Network):
@@ -222,18 +222,18 @@ class Optimizer:
     
     @property
     def bounds(self) -> list[tuple[float, float]]:
-        """ Get the bounds of the optimization variables."""
+        """ Get the bounds of the optimisation variables."""
         return [p.bounds for p in self.parameters]
     
     @property
     def x0(self) -> np.ndarray:
-        """ Get the initial values of the optimization variables."""
+        """ Get the initial values of the optimisation variables."""
         return np.array([p.value for p in self. parameters])
 
     def add_param(self, initial, bounds: tuple[float, float] = None, mapping: Callable = None) -> OptimVar:
-        """ Add an optimization variable.
+        """ Add an optimisation variable.
         
-        This method adds an optimization variable to the optimizer.
+        This method adds an optimisation variable to the optimiser.
         
         Parameters
         ----------
@@ -248,7 +248,7 @@ class Optimizer:
         Returns
         -------
         OptimVar
-            The optimization variable.
+            The optimisation variable.
         """
         param = OptimVar(initial, bounds=bounds, mapping=mapping)
         self.parameters.append(param)
@@ -260,7 +260,7 @@ class Optimizer:
             limits: tuple[float, float] = (-13, -6)) -> OptimVar:
         """ Add a capacitor parameter.
         
-        This method adds a capacitor parameter to the optimizer.
+        This method adds a capacitor parameter to the optimiser.
         The default capacitor range is from 0.1 pF to 1 uF.
         
         Parameters
@@ -288,7 +288,7 @@ class Optimizer:
             limits: tuple[float, float] = (-12,-5)) -> OptimVar:
         """ Add an inductor parameter.
         
-        This method adds an inductor parameter to the optimizer.
+        This method adds an inductor parameter to the optimiser.
         
         Parameters
         ----------
@@ -306,9 +306,9 @@ class Optimizer:
             return self.add_param(initial, limits, mapping= lambda x: 10**(x))
     
     def add_requirement(self, req: Requirement):
-        """ Add a requirement to the optimizer.
+        """ Add a requirement to the optimiser.
         
-        This method adds a requirement to the optimizer.
+        This method adds a requirement to the optimiser.
         
         Parameters
         ----------
@@ -326,9 +326,9 @@ class Optimizer:
                         lower_limit: float = None,
                         weight: float = 1,
                         f_norm: float | PNorm = 4):
-            """ Add a frequency level requirement to the optimizer.
+            """ Add a frequency level requirement to the optimiser.
             
-            This method adds a frequency level requirement to the optimizer.
+            This method adds a frequency level requirement to the optimiser.
             
             Parameters
             ----------
@@ -357,25 +357,25 @@ class Optimizer:
                            initial: np.ndarray = None, 
                            differential_weighting: float = 0,
                            differential_weighting_exponent: float = 5) -> Callable:
-        """ Generate the objective function for the optimizer.
+        """ Generate the objective function for the optimiser.
         
-        This method generates the objective function for the optimizer.
+        This method generates the objective function for the optimiser.
         
         Parameters
         ----------
         pnorm : int, optional
-            The norm to use in the optimization. If not specified, the P2 norm is used.
+            The norm to use in the optimisation. If not specified, the P2 norm is used.
         initial : np.ndarray, optional
-            The initial values of the optimization variables. If not specified, the default values are used.
+            The initial values of the optimisation variables. If not specified, the default values are used.
         differential_weighting : float, optional
-            The differential weighting to use in the optimization. If not specified, no differential weighting is used.
+            The differential weighting to use in the optimisation. If not specified, no differential weighting is used.
         differential_weighting_exponent : float, optional
             The exponent to use in the differential weighting. If not specified, the default value is used.
         
         Returns
         -------
         Callable
-            The objective function for the optimizer.
+            The objective function for the optimiser.
         
         """
         if initial is not None:
