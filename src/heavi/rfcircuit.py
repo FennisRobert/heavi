@@ -4,10 +4,8 @@ from typing import List, Callable
 from dataclasses import dataclass
 from collections import defaultdict
 import numpy as np
-from numba import njit, prange, c16, i8, f8
+from .solver import solve_single_frequency_c_compiled, compute_s_parameters, compute_s_parameters_no_loadbar
 import numba_progress as nbp
-from numba_progress.progress import ProgressBarType
-
 from loguru import logger
 
 from .sparam import Sparameters
@@ -111,161 +109,6 @@ def randomphasor(minv=0, maxv=1):
     return randmag(minv, maxv) * randphase()
 
 
-def _make_callable(value: float | complex | Callable) -> Callable:
-    """ Returns a callable function for a given value. """
-    if isinstance(value, Callable):
-        return value
-    else:
-        return lambda f: value*np.ones_like(f)
-    
-@njit(cache=True, parallel=True, fastmath=True)
-def solve_single_frequency_c_compiled(Is, Ys, Zs, indices, frequencies, progprox):
-    nT = len(indices)
-    nF = len(frequencies)
-    Ss = np.zeros((nT,nT,nF), dtype=np.complex128)
-    Vdonor = np.zeros((Is.shape[0],), dtype=np.complex128)
-    for it in range(nT):
-        ind1 = indices[it]
-        for i in prange(nF):
-            Vh = 0*Vdonor
-            Vh[1:] = np.linalg.solve(Ys[:,:,i],Is[1:,it,i])
-            for itt in range(nT):
-                ind2 = indices[itt]
-                Q = np.sqrt(
-                    np.abs(np.real(Zs[it,i]))
-                ) / np.sqrt(np.abs(np.real(Zs[itt,i])))
-                Ss[itt, it, i] = Q * (
-                    (Vh[ind2] * 2 - Zs[itt,i]* Is[ind2,it,i])
-                    / (Zs[it,i] * Is[ind1,it,i])
-                )
-            progprox.update(1)
-    return Ss
-
-@njit(cache=True, parallel=True, fastmath=True)
-def compute_s_parameters(Is, Ys, Zs, port_indices, frequencies, progress_object):
-    """
-    Compute the S-parameter matrix for an RF network using Numba for acceleration.
-
-    Parameters
-    ----------
-    Is : numpy.ndarray
-        Current sources, complex-valued array of shape (n_nodes, n_ports, n_freqs).
-    Ys : numpy.ndarray
-        Admittance matrices, complex-valued array of shape (n_nodes, n_nodes, n_freqs).
-    Zs : numpy.ndarray
-        Source impedances, complex-valued array of shape (n_nodes, n_freqs).
-    port_indices : numpy.ndarray
-        Indices of the nodes corresponding to the ports of interest, integer array of shape (n_ports,).
-    frequencies : numpy.ndarray
-        Frequencies, float-valued array of shape (n_freqs,).
-
-    Returns
-    -------
-    S_parameters : numpy.ndarray
-        S-parameter matrix, complex-valued array of shape (n_ports, n_ports, n_freqs).
-    """
-    num_ports = len(port_indices)
-    num_freqs = len(frequencies)
-    num_nodes = Is.shape[0]
-
-    # Initialize the S-parameter matrix
-    S_parameters = np.zeros((num_ports, num_ports, num_freqs), dtype=np.complex128)
-
-    # Voltage vector placeholder
-    Vh = np.zeros((num_nodes,), dtype=np.complex128)
-
-    for port_in_idx in range(num_ports):
-        node_in = port_indices[port_in_idx]
-        for freq_idx in prange(num_freqs):
-            # Reset voltage vector
-            Vh = 0*Vh
-
-            # Solve the system of equations for Vh[1:]
-            Vh[1:] = np.linalg.solve(
-                Ys[:,:, freq_idx],
-                Is[1:, port_in_idx, freq_idx]
-            )
-
-            Z_in = Zs[port_in_idx, freq_idx]
-
-            for port_out_idx in range(num_ports):
-                node_out = port_indices[port_out_idx]
-                Z_out = Zs[port_out_idx, freq_idx]
-
-                # Calculate scaling factor Q
-                Q = np.sqrt(np.abs(np.real(Z_in))) / np.sqrt(np.abs(np.real(Z_out)))
-
-                # Compute numerator and denominator for S-parameter calculation
-                numerator = Vh[node_out] * 2 - Z_out * Is[node_out, port_in_idx, freq_idx]
-                denominator = Z_in * Is[node_in, port_in_idx, freq_idx]
-
-                # Compute S-parameter
-                S_parameters[port_out_idx, port_in_idx, freq_idx] = Q * (numerator / denominator)
-            progress_object.update(1)
-    return S_parameters
-
-@njit(cache=True, parallel=True, fastmath=True)
-def compute_s_parameters_no_loadbar(Is, Ys, Zs, port_indices, frequencies):
-    """
-    Compute the S-parameter matrix for an RF network using Numba for acceleration.
-
-    Parameters
-    ----------
-    Is : numpy.ndarray
-        Current sources, complex-valued array of shape (n_nodes, n_ports, n_freqs).
-    Ys : numpy.ndarray
-        Admittance matrices, complex-valued array of shape (n_nodes, n_nodes, n_freqs).
-    Zs : numpy.ndarray
-        Source impedances, complex-valued array of shape (n_nodes, n_freqs).
-    port_indices : numpy.ndarray
-        Indices of the nodes corresponding to the ports of interest, integer array of shape (n_ports,).
-    frequencies : numpy.ndarray
-        Frequencies, float-valued array of shape (n_freqs,).
-
-    Returns
-    -------
-    S_parameters : numpy.ndarray
-        S-parameter matrix, complex-valued array of shape (n_ports, n_ports, n_freqs).
-    """
-    num_ports = len(port_indices)
-    num_freqs = len(frequencies)
-    num_nodes = Is.shape[0]
-
-    # Initialize the S-parameter matrix
-    S_parameters = np.zeros((num_ports, num_ports, num_freqs), dtype=np.complex128)
-
-    # Voltage vector placeholder
-    Vh = np.zeros((num_nodes,), dtype=np.complex128)
-
-    for port_in_idx in range(num_ports):
-        node_in = port_indices[port_in_idx]
-        for freq_idx in prange(num_freqs):
-            # Reset voltage vector
-            Vh = 0*Vh
-
-            # Solve the system of equations for Vh[1:]
-            Vh[1:] = np.linalg.solve(
-                Ys[:,:, freq_idx],
-                Is[1:, port_in_idx, freq_idx]
-            )
-
-            Z_in = Zs[port_in_idx, freq_idx]
-
-            for port_out_idx in range(num_ports):
-                node_out = port_indices[port_out_idx]
-                Z_out = Zs[port_out_idx, freq_idx]
-
-                # Calculate scaling factor Q
-                Q = np.sqrt(np.abs(np.real(Z_in))) / np.sqrt(np.abs(np.real(Z_out)))
-
-                # Compute numerator and denominator for S-parameter calculation
-                numerator = Vh[node_out] * 2 - Z_out * Is[node_out, port_in_idx, freq_idx]
-                denominator = Z_in * Is[node_in, port_in_idx, freq_idx]
-
-                # Compute S-parameter
-                S_parameters[port_out_idx, port_in_idx, freq_idx] = Q * (numerator / denominator)
-    return S_parameters
-
 @dataclass
 class Node:
     """ Node class for the Network object. """
@@ -273,18 +116,47 @@ class Node:
     _index: int = None
     _parent: Network = None
     _linked: Node = None
+    _gnd: bool = False
 
+    def __repr__(self) -> str:
+        if self._gnd:
+            return 'Node[GND]'
+        if self._linked is None:
+            return f"Node[{self._index}]"
+        else:
+            return f"LinkedNode[{self._index}>{self._linked._index}]"
+    
+    def __str__(self) -> str:
+        return self.__repr__()
+    
     def __hash__(self):
         return hash(f'{self.name}_{self.index}')
     
     def set_index(self, index: int):
         self._index = index
 
+    def unique(self) -> Node:
+        if self._linked is not None:
+            return self._linked
+        return self
+    
     @property
     def index(self) -> int:
         if self._linked is not None:
             return self._linked.index
         return self._index
+
+    def merge(self, other: Node) -> Node:
+        self._linked = other
+        return self
+    
+    def __gt__(self, other: Node) -> Node:
+        if isinstance(other, Node):
+            #logger.info(f'Merged {self} with {other}')
+            self._linked = other
+            return other
+        return NotImplemented
+    
 
 @dataclass
 class ComponentFunction:
@@ -329,6 +201,7 @@ class Component:
         self.type: ComponentType = type
         self._component_value: Scalar = parse_numeric(component_value)
         self._impedance: Scalar = None
+        self.meta_data: dict[str, str] = dict()
 
     @property
     def _display_value(self) -> float:
@@ -339,9 +212,12 @@ class Component:
 
     def __repr__(self) -> str:
         value, power = _get_power(self._display_value)
-        return f"{self.type.name}: {[s.name for s in self.nodes]}, value={value:.2f} {TEN_POWERS[power]}{self.type.unit}"
+        return f"{self.type.name}: {[str(n) for n in self.nodes]}, value={value:.2f} {TEN_POWERS[power]}{self.type.unit}"
         
-
+    def set_metadata(self, **kwargs: dict[str, str]) -> Component:
+        self.meta_data.update(kwargs)
+        return self
+    
     def _generate_compiler_function(self) -> Callable:
         '''Generates a callable that will plug in the components matrix entries for a given frequency.'''
         def compiler(matrix: np.ndarray, f: float) -> np.ndarray:
@@ -353,7 +229,7 @@ class Component:
 @dataclass
 class Terminal:
     ground: Node
-    port: Node
+    node: Node
     source: Component
     source_impedance: Component
 
@@ -379,11 +255,12 @@ class Network:
     """
 
     def __init__(self, default_name: str = 'Node', suppress_loadbar: bool = False):
-        self.gnd: Node = Node("gnd", _parent=self)
+        self.gnd: Node = Node("gnd", _parent=self, _gnd=True)
         self.nodes: list[Node] = [self.gnd]
         self.components: list[Component] = []
         self.sources: list[Component] = []
         self.terminals: list[Terminal] = []
+        self.ports: dict[int, Terminal] = {}
         self.node_counter: defaultdict[str, int] = defaultdict(int)
         self.node_default_name: str = default_name
         self.suppress_loadbar: bool = suppress_loadbar
@@ -399,14 +276,22 @@ class Network:
         '''A list of strings corresponding to each node.'''
         return [n.name for n in self.nodes]
 
-    def get_node_index(self, node: str) -> int:
-        '''Returns the index of a node corresponding with the tag name.'''
-        return self.nodes.index(node)
+    # def get_node_index(self, node: str) -> int:
+    #     '''Returns the index of a node corresponding with the tag name.'''
+    #     return self.nodes.index(node)
 
+    def unlinked_nodes(self) -> list[Node]:
+        '''Returns a list of nodes that are not linked to any other nodes.'''
+        return [node for node in self.nodes if node._linked is None]
+    
     def _compile_nodes(self) -> None:
         '''_compile_nodes writes an index number to the node's index field required for matrix lookup.'''
-        for i, node in enumerate(self.nodes):
+        i = 0
+        for node in self.nodes:
+            if node._linked is not None:
+                continue
             node.set_index(i)
+            i += 1
 
     def _new_node_name(self, basename: str = None) -> str:
         '''Generates a node name label to be used by checking which ones exist and then generating a new one.'''
@@ -424,6 +309,9 @@ class Network:
         self.nodes.append(N)
         return N
     
+    def port(self, number: int) -> Terminal:
+        return self.ports[number]
+
     def node(self, name: str = None) -> Node:
         '''Generates a new Node object for a node with the optionally provided label. Returns a Node object.'''
         if name is None:
@@ -446,20 +334,18 @@ class Network:
     def _check_unconnected_nodes(self) -> None:
         '''Checks for unconnected nodes in the network and raises a warning if any are found.'''
         # collecct a list of nodes and included status
-        node_dict = {node: False for node in self.nodes}
+        node_dict = {node.unique(): False for node in self.nodes}
 
-        # check if nodes are used
+        # check if nodes are used in components
         for component in self.components:
             for node in component.nodes:
-                node_dict[node] = True
+                node_dict[node.unique()] = True
         
-        # check if nodes are used
+        # check if nodes are used in terminals
         for terminal in self.terminals:
             for node in terminal.source.nodes:
-                node_dict[node] = True
+                node_dict[node.unique()] = True
         
-        # check if nodes are used
-
         for node, used in node_dict.items():
             if not used:
                 logger.error(f"Node {node.name} is not connected to any components.")
@@ -484,11 +370,11 @@ class Network:
 
         """
         self._compile_nodes()
-
         self._check_unconnected_nodes()
+
         nT = len(self.terminals)
         nF = len(frequencies)
-        nV = len(self.nodes)
+        nV = max([node.index for node in self.nodes]) + 1
 
         component_compilers = [c._generate_compiler_function() for c in self.components]
         terminal_compilers = [t.source._generate_compiler_function() for t in self.terminals]
@@ -507,7 +393,7 @@ class Network:
             Is[:,it,:] = terminal_compilers[it](Is[:,it,:],frequencies)
             Zs[it,:] = self.terminals[it].z_source(frequencies)
 
-        indices = np.array([self.get_node_index(self.terminals[ii].port) for ii, _ in enumerate(self.terminals)]).astype(np.int32)
+        indices = np.array([self.terminals[ii].node.index for ii, _ in enumerate(self.terminals)]).astype(np.int32)
         frequencies = np.array(frequencies).astype(np.float32)
         Sol = None
 
@@ -563,9 +449,10 @@ class Network:
 
         terminal_object = Terminal(gnd_node, signal_node, current_source, impedance_component)
         self.terminals.append(terminal_object)
+        self.ports[len(self.terminals)] = terminal_object
         return terminal_object
 
-    def port(self, impedance: float) -> Node:
+    def new_port(self, impedance: float) -> Node:
         '''Returns a tuple containing a Node and Terminal object.
         The Node object is generated with a name corresponding to the number.
         The Terminal object is generated with the Node object and the provided impedance
@@ -580,7 +467,7 @@ class Network:
         '''
 
         node = self.node()
-        self.terminal(node, impedance)
+        term = self.terminal(node, impedance)
         return node
     
     def admittance(self, node1: Node, node2: Node, Y: float, 

@@ -173,3 +173,5 @@ version_update.txt
 
 # All Test files:
 *_test.py
+
+_old_python_files/

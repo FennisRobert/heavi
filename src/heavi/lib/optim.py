@@ -1,14 +1,26 @@
 from ..numeric import SimParam
-from ..component import BaseComponent
-from ..rfcircuit import Network, Node
+from ..rfcircuit import Network
 from ..sparam import Sparameters
 from typing import Callable
-from scipy.optimize import minimize
 import numpy as np
 from enum import Enum
+from abc import ABC, abstractmethod
 
 class OptimVar(SimParam):
-
+    """ Class for defining an optimization variable. 
+    
+    This class is used to define a variable that can be optimized. It is a subclass of SimParam, and can be used in the same way.
+    
+    Parameters
+    ----------
+    initial_value : float
+        The initial value of the variable.
+    bounds : tuple[float, float], optional
+        The bounds of the variable. If not specified, the variable is unbounded.
+    mapping : Callable, optional
+        A function that maps the variable to a different space. If not specified, the variable is used as
+        is. The function should take a float and return a float.
+    """
     def __init__(self, initial_value: float, bounds: tuple[float, float] = None, mapping: Callable = None):
         self._value = initial_value
         self.bounds = bounds
@@ -23,112 +35,349 @@ class OptimVar(SimParam):
         else:
             return self.mapping(self._value)*np.ones_like(f)
 
-class LpNorm(Enum):
+class PNorm(Enum):
+    """ Enum for defining the type of norm to use in the optimization.
+    
+    This enum is used to define the type of norm to use in the optimization. It can be used to specify the type of norm to use in the optimization.
+    
+    Attributes
+    ----------
+    MIN : int
+        The minimum norm.
+    MAX : int
+        The maximum norm.
+    P1 : int
+        The P1 norm (average).
+    P2 : int
+        The P2 norm (root mean square).
+    """
     MIN = 0
     MAX = 1
-    LP1 = 2
-    LP2 =3
+    P1 = 2
+    P2 =3
 
-    def get_metric(self):
+    def get_metric(self) -> Callable:
+        """ Get the metric function for the norm."""
         if self is self.MAX:
             return np.max
         if self is self.MIN:
             return np.min
-        if self is self.LP1:
+        if self is self.P1:
             return np.mean
-        if self is self.LP2:
+        if self is self.P2:
             return lambda x: np.sqrt(np.mean(x**2))
 
-def pnorm(norm: float) -> Callable:
+def generalized_mean(norm: float) -> Callable:
+    """ Generate a generalized mean function.
+    
+    This function generates a generalized mean function with the specified norm.
+    
+    Parameters
+    ----------
+    norm : float
+        The norm of the mean.
+    
+    Returns
+    -------
+    Callable
+        The generalized mean function.
+        """
     def func(x):
         return np.mean(x**norm)**(1/norm)
     return func
 
+
 def dBbelow(dB_level: float,
-            norm: float | LpNorm = LpNorm.MAX):
-    if isinstance(norm, LpNorm):
+            norm: float | PNorm = PNorm.P2) -> Callable:
+    """ Generate a function that calculates the dB level below a specified level.
+    
+    This function generates a function that calculates the dB level below a specified level.
+    
+    Parameters
+    ----------
+    dB_level : float
+        The dB level to calculate the level below.
+    norm : float | PNorm, optional
+        The norm to use in the calculation. If not specified, the P2 norm is used.
+    
+    Returns
+    -------
+    Callable
+        The function that calculates the dB level below the specified level.
+    """
+
+    if isinstance(norm, PNorm):
         meval = norm.get_metric()
     else:
-        meval = pnorm(norm)
+        meval = generalized_mean(norm)
     
     def metric(S: np.ndarray) -> float:
-        return meval(np.clip(20*np.log10(np.abs(S))-dB_level, a_min=0, a_max=None))/5
-
+        return meval(np.clip(20*np.log10(np.abs(S))-dB_level, a_min=0, a_max=None))/10
     return metric
 
-class FreqRequirement:
+def dBabove(dB_level: float,
+            norm: float | PNorm = PNorm.P2) -> Callable:
+    """ Generate a function that calculates the dB level above a specified level.
+    
+    This function generates a function that calculates the dB level above a specified level.
+    
+    Parameters
+    ----------
+    dB_level : float
+        The dB level to calculate the level above.
+    norm : float | PNorm, optional
+        The norm to use in the calculation. If not specified, the P2 norm is used.
+    
+    Returns
+    -------
+    Callable
+        The function that calculates the dB level above the specified level.
+    """
+    
+    if isinstance(norm, PNorm):
+        meval = norm.get_metric()
+    else:
+        meval = generalized_mean(norm)
+    
+    def metric(S: np.ndarray) -> float:
+        return meval(np.clip(dB_level - 20*np.log10(np.abs(S)), a_min=0, a_max=None))/10
+    
+    return metric
+
+
+class Requirement(ABC):
+    """ Abstract class for defining a requirement.
+    
+    This class is used to define a requirement for an optimizer. It is an abstract class, and should be subclassed to define a specific requirement.
+    
+    """
+    @abstractmethod
+    def eval(self, S: Sparameters) -> float:
+        pass
+
+
+class FrequencyLevel(Requirement):
 
     def __init__(self, 
                  fmin: float,
                  fmax: float,
                  nF: int,
-                 parameter: tuple[int, int],
-                 metric: Callable,
-                 weight: float = 1):
+                 sparam: tuple[int, int],
+                 upper_limit: float = None,
+                 lower_limit: float = None,
+                 weight: float = 1,
+                 f_norm: float | PNorm = 4):
         self.fs = np.linspace(fmin,fmax,nF)
-        self.metric: Callable = metric
-        self.param: tuple[int, int] = parameter
+        self.param: tuple[int, int] = sparam
         self.slc: slice = None
         self.weight: float = weight
+
+        self.upper_limit = upper_limit
+        self.lower_limit = lower_limit
+
+        if upper_limit is not None and lower_limit is not None:
+            self.metric = dBbelow(upper_limit, norm=f_norm) + dBabove(lower_limit, norm=f_norm)
+        elif upper_limit is not None:
+            self.metric = dBbelow(upper_limit, norm=f_norm)
+        elif lower_limit is not None:
+            self.metric = dBabove(lower_limit, norm=f_norm)
+        else:
+            raise ValueError("At least one of upper_limit or lower_limit must be specified")
+        
 
     def eval(self, S: Sparameters) -> float:
         value = self.metric(S.S(self.param[0],self.param[1])[self.slc])*self.weight
         return value
+    
+    def generate_fill_area(self) -> tuple[float, float, float, float]:
+        lower = self.lower_limit
+        upper = self.upper_limit
+        if lower is None:
+            lower = 0
+        if upper is None:
+            upper = -100
+        return (self.fs[0], self.fs[-1], upper, lower)
 
-def gen_fill_area(fmin, fmax, below: float = None, above: float = None):
-    if below is not None:
-        return (fmin, fmax, below,0)
-    if above is not None:
-        return (fmin, fmax, -100, above)
-        
 
 class Optimizer:
-
+    """ Class for defining an optimizer.
+    
+    This class is used to define an optimizer for a network. It is used to define the parameters to optimize, the requirements to meet, and the objective function to optimize.
+    
+    Parameters
+    ----------
+    network : Network
+        The network to optimize.
+    
+    """
     def __init__(self, network: Network):
         self.network = network
         self.parameters: list[OptimVar] = []
-        self.requirements: list[FreqRequirement] = []
+        self.requirements: list[FrequencyLevel] = []
 
     @property
+    def spec_area(self) -> list[tuple[float, float, float, float]]:
+        """ Get the fill areas for the requirements."""
+        return [req.generate_fill_area() for req in self.requirements]
+    
+    @property
     def bounds(self) -> list[tuple[float, float]]:
+        """ Get the bounds of the optimization variables."""
         return [p.bounds for p in self.parameters]
     
     @property
     def x0(self) -> np.ndarray:
+        """ Get the initial values of the optimization variables."""
         return np.array([p.value for p in self. parameters])
 
     def add_param(self, initial, bounds: tuple[float, float] = None, mapping: Callable = None) -> OptimVar:
+        """ Add an optimization variable.
+        
+        This method adds an optimization variable to the optimizer.
+        
+        Parameters
+        ----------
+        initial : float
+            The initial value of the variable.
+        bounds : tuple[float, float], optional
+            The bounds of the variable. If not specified, the variable is unbounded.
+        mapping : Callable, optional
+            A function that maps the variable to a different space. If not specified, the variable is used as
+            is. The function should take a float and return a float.
+        
+        Returns
+        -------
+        OptimVar
+            The optimization variable.
+        """
         param = OptimVar(initial, bounds=bounds, mapping=mapping)
         self.parameters.append(param)
         return param
     
-    def cap(self, logscale: bool = True) -> OptimVar:
+    def cap(self, 
+            logscale: bool = True, 
+            initial: float = -12,
+            limits: tuple[float, float] = (-13, -6)) -> OptimVar:
+        """ Add a capacitor parameter.
+        
+        This method adds a capacitor parameter to the optimizer.
+        The default capacitor range is from 0.1 pF to 1 uF.
+        
+        Parameters
+        ----------
+        logscale : bool, optional
+            Whether to use a log scale for the parameter. If not specified, a log scale is used.
+        initial : float, optional
+            The initial value of the parameter. If not specified, the default value is used (1 pF).
+        limits : tuple[float, float], optional
+            The limits of the parameter. If not specified, the default limits are used (0.1 pF to 1 uF).
+        
+        Returns
+        -------
+        OptimVar
+            The capacitor parameter.
+        """
         if not logscale:
-            return self.add_param(1e-12, (1e-13,1e-6))
+            return self.add_param(10**initial, (1*10**limits[0], 1*10**limits[1]))
         else:
-            return self.add_param(-12, (-13,-6), mapping= lambda x: 10**(x))
+            return self.add_param(initial, limits, mapping= lambda x: 10**(x))
     
-    def ind(self, logscale: bool = True) -> OptimVar:
+    def ind(self, 
+            logscale: bool = True,
+            initial: float = -9,
+            limits: tuple[float, float] = (-12,-5)) -> OptimVar:
+        """ Add an inductor parameter.
+        
+        This method adds an inductor parameter to the optimizer.
+        
+        Parameters
+        ----------
+        logscale : bool, optional
+            Whether to use a log scale for the parameter. If not specified, a log scale is used.
+        
+        Returns
+        -------
+        OptimVar
+            The inductor parameter.
+        """
         if not logscale:
-            return self.add_param(1e-9, (1e-12,1e-5))
+            return self.add_param(10**initial, (10**(limits[0]),10**(limits[1])))
         else:
-            return self.add_param(-9, (-12,-5), mapping= lambda x: 10**(x))
+            return self.add_param(initial, limits, mapping= lambda x: 10**(x))
     
-    def add_goal(self, 
-                 fmin: float,
-                 fmax: float,
-                 n_frequencies: int,
-                 indices: tuple[int,int],
-                 metric: Callable,
-                 weight: float = 1):
-        self.requirements.append(FreqRequirement(fmin, fmax, n_frequencies, indices, metric, weight=weight))
+    def add_requirement(self, req: Requirement):
+        """ Add a requirement to the optimizer.
+        
+        This method adds a requirement to the optimizer.
+        
+        Parameters
+        ----------
+        req : Requirement
+            The requirement to add.
+        """
+        self.requirements.append(req)
+
+    def add_freqlevel(self,
+                        fmin: float,
+                        fmax: float,
+                        nF: int,
+                        sparam: tuple[int, int],
+                        upper_limit: float = None,
+                        lower_limit: float = None,
+                        weight: float = 1,
+                        f_norm: float | PNorm = 4):
+            """ Add a frequency level requirement to the optimizer.
+            
+            This method adds a frequency level requirement to the optimizer.
+            
+            Parameters
+            ----------
+            fmin : float
+                The minimum frequency of the requirement.
+            fmax : float
+                The maximum frequency of the requirement.
+            nF : int
+                The number of frequencies to use in the requirement.
+            sparam : tuple[int, int]
+                The S-parameter to use in the requirement.
+            upper_limit : float, optional
+                The upper limit of the requirement. If not specified, the requirement is unbounded.
+            lower_limit : float, optional
+                The lower limit of the requirement. If not specified, the requirement is unbounded.
+            weight : float, optional
+                The weight of the requirement. If not specified, the weight is 1.
+            f_norm : float | PNorm, optional
+                The norm to use in the requirement. If not specified, the P2 norm is used.
+            """
+            req = FrequencyLevel(fmin, fmax, nF, sparam, upper_limit=upper_limit, lower_limit=lower_limit, weight=weight, f_norm=f_norm)
+            self.add_requirement(req)
 
     def generate_objective(self, 
                            pnorm=2, 
                            initial: np.ndarray = None, 
                            differential_weighting: float = 0,
                            differential_weighting_exponent: float = 5) -> Callable:
-
+        """ Generate the objective function for the optimizer.
+        
+        This method generates the objective function for the optimizer.
+        
+        Parameters
+        ----------
+        pnorm : int, optional
+            The norm to use in the optimization. If not specified, the P2 norm is used.
+        initial : np.ndarray, optional
+            The initial values of the optimization variables. If not specified, the default values are used.
+        differential_weighting : float, optional
+            The differential weighting to use in the optimization. If not specified, no differential weighting is used.
+        differential_weighting_exponent : float, optional
+            The exponent to use in the differential weighting. If not specified, the default value is used.
+        
+        Returns
+        -------
+        Callable
+            The objective function for the optimizer.
+        
+        """
         if initial is not None:
             for p, v in zip(self.parameters, initial):
                 p.value = v
@@ -146,7 +395,6 @@ class Optimizer:
                     p.set(c)
                 S = self.network.run(fs)
                 Ms = np.array([abs(req.eval(S)) for req in self.requirements])
-                #print(Ms, max(Ms)-min(Ms))
                 return (np.mean(Ms**pnorm))**(1/pnorm) + differential_weighting*(max(Ms)-min(Ms))**differential_weighting_exponent
         else:
             def objective(coeffs):

@@ -180,7 +180,7 @@ class PCBStack:
     
     def port(self, impedance: float, layer: int = 0) -> NodeForwarder:
         """ Create a new path starting from a port. """
-        n = self.network.port(impedance)
+        n = self.network.new_port(impedance)
         return NodeForwarder(n, layer, self, impedance)
 
     def transmission_line(self, n1: Node, n2: Node, length: float, impedance: float = None, width: float = None, layer: int = 0, gnd: Node = None) -> NodeForwarder:
@@ -219,7 +219,7 @@ class NodeForwarder:
 
     def terminate(self, Z0: float) -> Node:
         """ Terminate the path with a resistor. """
-        return self.pcb.network.terminal(self.node, Z0).port
+        return self.pcb.network.terminal(self.node, Z0).node
     
     def straight(self, L: float, Z0: float = None, width: float = None) -> NodeForwarder:
         """ Create a straight path. """
