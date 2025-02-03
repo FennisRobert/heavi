@@ -54,7 +54,7 @@ model.filters.cauer_filter(
 f = hf.frange(1.8e9, 2.2e9, 2001)
 
 # Perform S-parameter analysis
-S = model.run_sparameter_analysis(f)
+S = model.run(f)
 
 # Plot S-parameters
 hf.plot_s_parameters(f, [S.S11, S.S21], labels=["S11", "S21"], linestyles=["-", "-"], colorcycle=[0, 1])
