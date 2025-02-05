@@ -4,12 +4,12 @@ from typing import List, Callable
 from dataclasses import dataclass
 from collections import defaultdict
 import numpy as np
-from .solver import solve_single_frequency_c_compiled, compute_s_parameters, compute_s_parameters_no_loadbar
+from .solver import solve_MNA_RF, solve_MNA_RF_nopgb
 import numba_progress as nbp
 from loguru import logger
 
 from .sparam import Sparameters
-from .numeric import Scalar, parse_numeric, Function
+from .numeric import Scalar, parse_numeric, Function, SimParam
 
 TEN_POWERS = {
     -12: "p",
@@ -29,6 +29,12 @@ def _get_power(number: float):
     v = min(12, max(-12, v))
     v2 = number / (10**v)
     return v2, v
+
+def format_value_units(value: float, unit: str) -> str:
+    """ Formats a value with units for display. """
+    
+    v, p = _get_power(value)
+    return f"{v:.2f} {TEN_POWERS[p]}{unit}"
 
 def Z0_VSWR(Z0: float, max_vswr: float) -> float:
     """
@@ -60,34 +66,33 @@ def Z0_VSWR(Z0: float, max_vswr: float) -> float:
     return impedance
 
 
-class ComponentType(Enum):
-    UNDEFINED = 0
-    RESISTOR = 1
-    CAPACITOR = 2
-    INDUCTOR = 3
-    CURRENTSOURCE = 4
-    VOLTAGESOURCE = 5
-    IMPEDANCE = 6
-    ADMITTANCE = 7
-    TRANSMISSIONLINE = 8
-    NPORT = 9
-    CUSTOM = 10
+class Components:
+    RESISTOR = {'name': 'Resistor', 'unit': 'Ω'}
+    CAPACITOR = {'name': 'Capacitor', 'unit': 'F'}
+    INDUCTOR = {'name': 'Inductor', 'unit': 'H'}
+    CURRENTSOURCE = {'name': 'Current Source', 'unit': 'A'}
+    VOLTAGESOURCE = {'name': 'Voltage Source', 'unit': 'V'}
+    IMPEDANCE = {'name': 'Impedance', 'unit': 'Ω'}
+    ADMITTANCE = {'name': 'Admittance', 'unit': 'G'}
+    TRANSMISSIONLINE = {'name': 'Transmission Line', 'unit': 'Ω'}
+    NPORT = {'name': 'N-Port', 'unit': 'None'}
+    CUSTOM = {'name': 'Custom', 'unit': 'None'}
 
-    @property
-    def unit(self):
-        unitdict = {
-            self.UNDEFINED: "__",
-            self.RESISTOR: "Ohm",
-            self.CAPACITOR: "F",
-            self.INDUCTOR: "H",
-            self.CURRENTSOURCE: "A",
-            self.VOLTAGESOURCE: "V",
-            self.IMPEDANCE: "Ohm",
-            self.ADMITTANCE: "G",
-            self.TRANSMISSIONLINE: "Ohm",
-            self.NPORT: "None",
-        }
-        return unitdict[self]
+#     @property
+#     def unit(self):
+#         unitdict = {
+#             self.UNDEFINED: "__",
+#             self.RESISTOR: "Ohm",
+#             self.CAPACITOR: "F",
+#             self.INDUCTOR: "H",
+#             self.CURRENTSOURCE: "A",
+#             self.VOLTAGESOURCE: "V",
+#             self.IMPEDANCE: "Ohm",
+#             self.ADMITTANCE: "G",
+#             self.TRANSMISSIONLINE: "Ohm",
+#             self.NPORT: "None",
+#         }
+#         return unitdict[self]
 
 
 twopi = 2 * np.pi
@@ -194,27 +199,33 @@ class Component:
 
     """
     def __init__(
-        self, nodes, functionlist, type: ComponentType = ComponentType.UNDEFINED, component_value: Scalar = None
+        self, nodes, functionlist, component_value: Scalar = None
     ):
         self.nodes: list[Node] = nodes
         self.functionlist: list[ComponentFunction] = functionlist
-        self.type: ComponentType = type
         self._component_value: Scalar = parse_numeric(component_value)
         self._impedance: Scalar = None
         self.meta_data: dict[str, str] = dict()
 
+        self.component_name: str = None
+        self.component_unit: str = None
+
     @property
-    def _display_value(self) -> float:
-        return self._component_value.value
+    def display_value(self) -> str:
+        return format_value_units(self._component_value.scalar(), self.component_unit)
     
     def __str__(self) -> str:
         return self.__repr__()
 
     def __repr__(self) -> str:
-        value, power = _get_power(self._display_value)
-        return f"{self.type.name}: {[str(n) for n in self.nodes]}, value={value:.2f} {TEN_POWERS[power]}{self.type.unit}"
+        value = self.display_value
+        return f"{self.component_name}: {[str(n) for n in self.nodes]}, value={value}"
         
-    def set_metadata(self, **kwargs: dict[str, str]) -> Component:
+    def set_metadata(self, name: str = 'Component', unit: str = '', value: float | SimParam = None, **kwargs: dict[str, str]) -> Component:
+        self.component_name = name
+        self.component_unit = unit
+        if value is not None:
+            self._component_value = parse_numeric(value)
         self.meta_data.update(kwargs)
         return self
     
@@ -227,16 +238,17 @@ class Component:
         return compiler
 
 @dataclass
-class Terminal:
+class Source:
     ground: Node
     node: Node
-    source: Component
+    source_node: Node
     source_impedance: Component
+    dc_voltage: float = 1
+    ac_voltage: float = 1
 
     @property
     def ground_node(self) -> Node:
-        return self.source.nodes
-
+        return self.ground
     @property
     def z_source(self) -> Scalar:
         return self.source_impedance._impedance
@@ -258,9 +270,8 @@ class Network:
         self.gnd: Node = Node("gnd", _parent=self, _gnd=True)
         self.nodes: list[Node] = [self.gnd]
         self.components: list[Component] = []
-        self.sources: list[Component] = []
-        self.terminals: list[Terminal] = []
-        self.ports: dict[int, Terminal] = {}
+        self.sources: list[Source] = []
+        self.ports: dict[int, Source] = {}
         self.node_counter: defaultdict[str, int] = defaultdict(int)
         self.node_default_name: str = default_name
         self.suppress_loadbar: bool = suppress_loadbar
@@ -275,10 +286,6 @@ class Network:
     def node_names(self) -> list[str]:
         '''A list of strings corresponding to each node.'''
         return [n.name for n in self.nodes]
-
-    # def get_node_index(self, node: str) -> int:
-    #     '''Returns the index of a node corresponding with the tag name.'''
-    #     return self.nodes.index(node)
 
     def unlinked_nodes(self) -> list[Node]:
         '''Returns a list of nodes that are not linked to any other nodes.'''
@@ -309,7 +316,7 @@ class Network:
         self.nodes.append(N)
         return N
     
-    def port(self, number: int) -> Terminal:
+    def port(self, number: int) -> Source:
         return self.ports[number]
 
     def node(self, name: str = None) -> Node:
@@ -342,9 +349,10 @@ class Network:
                 node_dict[node.unique()] = True
         
         # check if nodes are used in terminals
-        for terminal in self.terminals:
-            for node in terminal.source.nodes:
-                node_dict[node.unique()] = True
+        for source in self.sources:
+            node_dict[source.ground_node] = True
+            node_dict[source.node] = True
+            node_dict[source.source_node] = True
         
         for node, used in node_dict.items():
             if not used:
@@ -355,10 +363,10 @@ class Network:
     def run_sparameter_analysis(self, frequencies: np.ndarray) -> Sparameters:
         logger.warning("run_sparameter_analysis will be deprecated. Use run instead.")
         return self.run(frequencies)
-
+    
     def run(self, frequencies: np.ndarray) -> Sparameters:
         """
-        Runs an S-parameter analysis for the network at the specified frequencies.
+        Runs an S-parameter analysis using the MNA method for the network at the specified frequencies.
 
         Parameters:
         -----------
@@ -371,40 +379,52 @@ class Network:
         """
         self._compile_nodes()
         self._check_unconnected_nodes()
-
-        nT = len(self.terminals)
+        
+        M = len(self.sources)
         nF = len(frequencies)
-        nV = max([node.index for node in self.nodes]) + 1
+        N = max([node.index for node in self.nodes]) + 1
+
 
         component_compilers = [c._generate_compiler_function() for c in self.components]
-        terminal_compilers = [t.source._generate_compiler_function() for t in self.terminals]
+        
+        ntot = M * nF
 
-        ntot = nT * nF
-
-        Y = np.zeros((nV, nV, nF), dtype=np.complex128)
+        G = np.zeros((N, N, nF), dtype=np.complex128)
+        B = np.zeros((N, M, nF), dtype=np.complex128)
+        D = np.zeros((M, M, nF), dtype=np.complex128)
+        A = np.zeros((M+N, M+N, nF), dtype=np.complex128)
 
         for compiler in component_compilers:
-            Y = compiler(Y, frequencies)
+            G = compiler(G, frequencies)
 
-        Ys = Y[1:, 1:, :]
-        Zs = np.zeros((nT,nF), dtype=np.complex128)
-        Is = np.zeros((nV,nT,nF), dtype=np.complex128)
-        for it in range(nT):
-            Is[:,it,:] = terminal_compilers[it](Is[:,it,:],frequencies)
-            Zs[it,:] = self.terminals[it].z_source(frequencies)
+        for i, source in enumerate(self.sources):
+            B[source.ground.index,i] = -1.0
+            B[source.source_node.index,i] = 1.0
+        
+        D = np.transpose(B,(1,0,2))
 
-        indices = np.array([self.terminals[ii].node.index for ii, _ in enumerate(self.terminals)]).astype(np.int32)
+        voltage_source_nodes = [(t.node.index, t.source_node.index, t.ground_node.index) for t in self.sources]
+
+        A[:N,:N,:] = G 
+        A[:N, N:,:] = B
+        A[N:,:N,:] = D
+
+        Zs = np.zeros((M,nF), dtype=np.complex128)
+        for it in range(M):
+            Zs[it,:] = self.sources[it].z_source(frequencies)
+
+
+        indices = np.array(voltage_source_nodes).astype(np.int32)
         frequencies = np.array(frequencies).astype(np.float32)
         Sol = None
 
         if self.suppress_loadbar:
-            Sol = compute_s_parameters_no_loadbar(Is, Ys, Zs, indices, frequencies)
+            V, Sol = solve_MNA_RF_nopgb(A, Zs, indices, frequencies)
         else:
             with nbp.ProgressBar(total=ntot) as progress:
-                Sol = compute_s_parameters(Is, Ys, Zs, indices, frequencies, progress) 
+                V, Sol = solve_MNA_RF(A, Zs, indices, frequencies, progress) 
         
         return Sparameters(Sol, frequencies)
-    
 
     def current_source(self, node_from: Node, node_to: Node, current: float | Scalar) -> Component:
         """
@@ -422,12 +442,12 @@ class Network:
         functionlist.append(ComponentFunction([node_from], current.negative()))
         functionlist.append(ComponentFunction([node_to], current))
         current_source_obj = Component(
-            [node_from, node_to], functionlist, type=ComponentType.CURRENTSOURCE, component_value=current
-        )
+            [node_from, node_to], functionlist, component_value=current
+        ).set_metadata(**Components.CURRENTSOURCE)
         self.sources.append(current_source_obj)
         return current_source_obj
 
-    def terminal(self, signal_node: Node, Z0: float | Scalar, gnd_node: Node = None) -> Terminal:
+    def terminal(self, signal_node: Node, Z0: float | Scalar, gnd_node: Node = None) -> Source:
         """ Adds a terminal to the network and returns the created terminal object.
         Parameters:
         -----------
@@ -443,13 +463,13 @@ class Network:
 
         if gnd_node is None:
             gnd_node = self.gnd
+        
+        source_node = self.named_node('IntermediatePortNode')
         Z0 = parse_numeric(Z0)
-        impedance_component = self.impedance(gnd_node, signal_node, Z0, display_value=Z0)
-        current_source = self.current_source(gnd_node, signal_node, Z0.inverse())
-
-        terminal_object = Terminal(gnd_node, signal_node, current_source, impedance_component)
-        self.terminals.append(terminal_object)
-        self.ports[len(self.terminals)] = terminal_object
+        impedance_component = self.impedance(source_node, signal_node, Z0, display_value=Z0).set_metadata(**Components.RESISTOR)
+        terminal_object = Source(gnd_node, signal_node, source_node, impedance_component)
+        self.sources.append(terminal_object)
+        self.ports[len(self.sources)] = terminal_object
         return terminal_object
 
     def new_port(self, impedance: float) -> Node:
@@ -467,11 +487,10 @@ class Network:
         '''
 
         node = self.node()
-        term = self.terminal(node, impedance)
+        self.terminal(node, impedance)
         return node
     
     def admittance(self, node1: Node, node2: Node, Y: float, 
-                  component_type: ComponentType = ComponentType.ADMITTANCE,
                   display_value: float = None) -> Component:
         """
         Adds an admittance component between two nodes and returns the created component.
@@ -499,13 +518,12 @@ class Network:
         functionlist.append(ComponentFunction([node2, node1], admittance_simvalue.negative()))
         functionlist.append(ComponentFunction([node2, node2], admittance_simvalue))
 
-        admittance_component = Component([node1, node2], functionlist, type=component_type, component_value=display_value)
+        admittance_component = Component([node1, node2], functionlist, component_value=display_value).set_metadata(**Components.ADMITTANCE)
         admittance_component._impedance = admittance_simvalue.inverse()
         self.components.append(admittance_component)
         return admittance_component
 
-    def impedance(self, node1: Node, node2: Node, Z: float, 
-                  component_type: ComponentType = ComponentType.IMPEDANCE,
+    def impedance(self, node1: Node, node2: Node, Z: float,
                   display_value: float = None) -> Component:
         """Creates and returns a component object for an impedance.
 
@@ -535,7 +553,7 @@ class Network:
         functionlist.append(ComponentFunction([node1, node2], admittance.negative()))
         functionlist.append(ComponentFunction([node2, node1], admittance.negative()))
         functionlist.append(ComponentFunction([node2, node2], admittance))
-        impedance_object = Component([node1, node2], functionlist, type=component_type, component_value=display_value)
+        impedance_object = Component([node1, node2], functionlist, component_value=display_value).set_metadata(**Components.IMPEDANCE)
         impedance_object._impedance = impedance
         self.components.append(impedance_object)
         return impedance_object
@@ -555,7 +573,7 @@ class Network:
         Impedance: The impedance object representing the resistor between the two nodes.
         """
         
-        return self.impedance(node1, node2, R, component_type=ComponentType.RESISTOR, display_value=R)
+        return self.impedance(node1, node2, R, display_value=R).set_metadata(**Components.RESISTOR)
 
     def capacitor(self, node1: Node, node2: Node, C: float) -> Component:
         """
@@ -580,7 +598,7 @@ class Network:
         
         admittance = Function(admittance_f)
         
-        return self.admittance(node1, node2, admittance, component_type=ComponentType.CAPACITOR, display_value=C)
+        return self.admittance(node1, node2, admittance, display_value=C).set_metadata(**Components.CAPACITOR)
         
         
     def inductor(self, node1: Node, node2: Node, L: float):
@@ -600,7 +618,7 @@ class Network:
         
         admittance = Function(admittance_f)
         
-        return self.admittance(node1, node2, admittance, component_type=ComponentType.INDUCTOR, display_value=L)
+        return self.admittance(node1, node2, admittance, display_value=L).set_metadata(**Components.INDUCTOR)
     
         
     def transmissionline(
@@ -722,12 +740,12 @@ class Network:
         )
 
         transmissionline_component = Component(
-            [gnd, port1, port2], functionlist, type=ComponentType.TRANSMISSIONLINE, component_value=Z0
-        )
+            [gnd, port1, port2], functionlist, component_value=Z0
+        ).set_metadata(**Components.TRANSMISSIONLINE)
         self.components.append(transmissionline_component)
         return transmissionline_component
 
-    def TL(self, node1: Node, node2: Node, beta: float | Scalar, length: float | Scalar, Z0: float | Scalar):
+    def TL(self, node1: Node, node2: Node, beta: float | Scalar, length: float | Scalar, Z0: float | Scalar) -> Component:
         beta = parse_numeric(beta)
         length = parse_numeric(length)
         Z0 = parse_numeric(Z0)
@@ -750,55 +768,16 @@ class Network:
         def y22(f):
             return a11(f)/a12(f)
         
-        self.n_port_Y(self.gnd, [node1, node2], [[y11, y12], [y21, y22]], Z0, component_type=ComponentType.TRANSMISSIONLINE)
-
-    def two_port_reciprocal(
-        self,
-        gnd: Node,
-        port1: Node,
-        port2: Node,
-        S11: complex,
-        S12: complex,
-        S22: complex,
-        Z0: float,
-    ) -> tuple[Component, Component, Component]:
-        """
-        Calculate the admittance parameters for a two-port reciprocal network.
-        Args:
-            gnd (Node): The ground node.
-            port1 (Node): The first port node.
-            port2 (Node): The second port node.
-            S11 (complex): The S11 scattering parameter as a function of frequency.
-            S12 (complex): The S12 scattering parameter as a function of frequency.
-            S22 (complex): The S22 scattering parameter as a function of frequency.
-            Z0 (float): The characteristic impedance.
-        Returns:
-            tuple[Component, Component, Component]: A tuple containing the admittance components Y1, Y2, and Y3.
-        """
-        Z0 = parse_numeric(Z0)
-        def detS(f):
-            return ((1 + S11(f)) * (1 + S22(f))) - S12(f) ** 2
-        def Y11(f):
-            return ((1 - S11(f)) * (1 + S22(f)) + S12(f) ** 2) / (detS(f)) * 1 / Z0(f)
-        def Y12(f):
-            return -2 * S12(f) / detS(f) * 1 / Z0(f)
-        def Y22(f):
-            return ((1 + S11(f)) * (1 - S22(f)) + S12(f) ** 2) / (detS(f)) * 1 / Z0(f)
-
-        Y1 = self.admittance(gnd, port1, lambda f: Y11(f) + Y12(f))
-        Y2 = self.admittance(port1, port2, lambda f: -Y12(f))
-        Y3 = self.admittance(gnd, port2, lambda f: Y22(f) + Y12(f))
-
-        return (Y1, Y2, Y3)
-
+        comp = self.n_port_Y(self.gnd, [node1, node2], [[y11, y12], [y21, y22]], Z0).set_metadata(value = Z0, **Components.TRANSMISSIONLINE)
+        return comp
+    
     def n_port_S(
             self,
             gnd: Node,
             nodes: list[Node],
             Sparam: list[list[Callable]],
             Z0: float,
-            component_type: ComponentType = ComponentType.NPORT
-    ) -> None:
+    ) -> Component:
         """Adds an N-port S-parameter component to the circuit.
 
         Parameters:
@@ -833,8 +812,9 @@ class Network:
                 Y2[N,i,:] = -np.sum(Y[:,i,:],axis=0)
                 Y2[N,N,:] += np.sum(Y[i,:,:],axis=0)
             return Y2
-        component = Component(nodes + [gnd, ],[ComponentFunction(nodes + [gnd, ],Function(comp_function),True),],component_type, Z0 )
+        component = Component(nodes + [gnd, ],[ComponentFunction(nodes + [gnd, ],Function(comp_function),True),], Z0 ).set_metadata(value=Z0, **Components.NPORT)
         self.components.append(component)
+        return component
 
     def n_port_Y(
             self,
@@ -842,8 +822,7 @@ class Network:
             nodes: list[Node],
             Yparams: list[list[Callable]],
             Z0: float,
-            component_type: ComponentType = ComponentType.NPORT
-    ) -> None:
+    ) -> Component:
         """Adds an N-port Y-parameter component to the circuit.
 
         Parameters:
@@ -876,8 +855,9 @@ class Network:
                 Y2[N,i,:] = -np.sum(Y[:,i,:],axis=0)
                 Y2[N,N,:] += np.sum(Y[i,:,:],axis=0)
             return Y2
-        component = Component(nodes + [gnd, ],[ComponentFunction(nodes + [gnd, ],Function(comp_function),True),],component_type, Z0 )
+        component = Component(nodes + [gnd, ],[ComponentFunction(nodes + [gnd, ],Function(comp_function),True),], Z0 ).set_metadata(value=Z0, **Components.NPORT)
         self.components.append(component)
+        return component
     
     
 
@@ -922,3 +902,42 @@ class Network:
     #         - 1 / (func_z0(f) * np.sinh(L * 2 * pi * f * np.sqrt(func_er(f)) / c0)),
     #     )
     #     return [Z1, Z2, Z3]
+
+    # def two_port_reciprocal(
+    #     self,
+    #     gnd: Node,
+    #     port1: Node,
+    #     port2: Node,
+    #     S11: complex,
+    #     S12: complex,
+    #     S22: complex,
+    #     Z0: float,
+    # ) -> tuple[Component, Component, Component]:
+    #     """
+    #     Calculate the admittance parameters for a two-port reciprocal network.
+    #     Args:
+    #         gnd (Node): The ground node.
+    #         port1 (Node): The first port node.
+    #         port2 (Node): The second port node.
+    #         S11 (complex): The S11 scattering parameter as a function of frequency.
+    #         S12 (complex): The S12 scattering parameter as a function of frequency.
+    #         S22 (complex): The S22 scattering parameter as a function of frequency.
+    #         Z0 (float): The characteristic impedance.
+    #     Returns:
+    #         tuple[Component, Component, Component]: A tuple containing the admittance components Y1, Y2, and Y3.
+    #     """
+    #     Z0 = parse_numeric(Z0)
+    #     def detS(f):
+    #         return ((1 + S11(f)) * (1 + S22(f))) - S12(f) ** 2
+    #     def Y11(f):
+    #         return ((1 - S11(f)) * (1 + S22(f)) + S12(f) ** 2) / (detS(f)) * 1 / Z0(f)
+    #     def Y12(f):
+    #         return -2 * S12(f) / detS(f) * 1 / Z0(f)
+    #     def Y22(f):
+    #         return ((1 + S11(f)) * (1 - S22(f)) + S12(f) ** 2) / (detS(f)) * 1 / Z0(f)
+
+    #     Y1 = self.admittance(gnd, port1, lambda f: Y11(f) + Y12(f))
+    #     Y2 = self.admittance(port1, port2, lambda f: -Y12(f))
+    #     Y3 = self.admittance(gnd, port2, lambda f: Y22(f) + Y12(f))
+
+    #     return (Y1, Y2, Y3)

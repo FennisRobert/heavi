@@ -1,5 +1,4 @@
-from ..component import BaseComponent
-from ..rfcircuit import ComponentType
+from .libgen import BaseComponent, BaseTwoPort
 from enum import Enum
 
 
@@ -24,7 +23,7 @@ class SMDInductorSize(Enum):
     L1206 = "1206"
     # Add other sizes as needed
 
-class SMDResistor(BaseComponent):
+class SMDResistor(BaseTwoPort):
     """
     A simple SMD resistor model that accounts for parasitic inductance and capacitance 
     based on package size.
@@ -51,7 +50,7 @@ class SMDResistor(BaseComponent):
         super().__init__()
         self.n_nodes = 2
         self.resistance = resistance
-        
+        self.package = package
         # Typical empirical parasitic values (approximate):
         # These can vary depending on manufacturer, pad layout, etc.
         # You can refine or expand as necessary.
@@ -72,6 +71,8 @@ class SMDResistor(BaseComponent):
             self.inductance = default_inductance
             self.capacitance = default_capacitance
 
+        self.function = None
+
     def __on_connect__(self):
         """
         Connects the SMD resistor with its parasitic R, L, and C
@@ -87,11 +88,15 @@ class SMDResistor(BaseComponent):
             Zc = 1 / (1j * w * self.capacitance)
             # return Zr + Zl parallel to Zc
             return (Zr+Zl) * Zc / (Zr + Zl + Zc)
-        
-        self.network.impedance(self.node(1), self.node(2), z_parasitic,
-                               component_type=ComponentType.RESISTOR, display_value=self.resistance)
+        self.function = z_parasitic
+        self.network.impedance(self.node(1), self.node(2), z_parasitic, display_value=self.resistance)\
+        .set_metadata(name=f'{self.package}SMD Resistor',
+                      unit='Ω',
+                      value=self.resistance,
+                      inductance=self.inductance,
+                      capacitance=self.capacitance)
 
-class SMDInductor(BaseComponent):
+class SMDInductor(BaseTwoPort):
     """
     An SMD inductor with a simple R-L // C parasitic model.
     
@@ -118,6 +123,7 @@ class SMDInductor(BaseComponent):
             The package size of the SMD inductor (e.g. 0402, 0603, etc.).
         """
         super().__init__()
+        self.package = package
         self.n_nodes = 2
         self.inductance = inductance
         
@@ -141,6 +147,8 @@ class SMDInductor(BaseComponent):
             self.esr = default_esr
             self.parallel_capacitance = default_cpar
 
+        self.function = None
+
     def __on_connect__(self):
         """
         Connects the SMD inductor in the network as a single
@@ -163,25 +171,21 @@ class SMDInductor(BaseComponent):
             z_series = self.esr + 1j * w * self.inductance
             
             # Parallel capacitor = 1 / (jωC)
-            if self.parallel_capacitance > 0 and w > 0:
-                z_parallel_cap = 1 / (1j * w * self.parallel_capacitance)
-            else:
-                # If no parallel capacitance, treat as infinite impedance
-                z_parallel_cap = float('inf')
+            z_parallel_cap = 1 / (1j * w * self.parallel_capacitance)
             
             # Combine them in parallel:
             # Z_total = (z_series * z_parallel_cap) / (z_series + z_parallel_cap)
-            if z_series == float('inf'):
-                return z_parallel_cap
-            if z_parallel_cap == float('inf'):
-                return z_series
-            return (z_series * z_parallel_cap) / (z_series + z_parallel_cap)
-        
+            return 1 / (1/(z_series) + 1/(z_parallel_cap))#(z_series * z_parallel_cap) / (z_series + z_parallel_cap)
+        self.function = z_parasitic
         # Create the impedance component in the network
-        self.network.impedance(self.node(1), self.node(2), z_parasitic,
-                               component_type=ComponentType.INDUCTOR, display_value=self.inductance)
+        self.network.impedance(self.node(1), self.node(2), z_parasitic, display_value=self.inductance)\
+        .set_metadata(name=f'{self.package}SMD Inductor',
+                      unit='H',
+                      value=self.inductance,
+                      esr=self.esr,
+                      parallel_capacitance=self.parallel_capacitance)
 
-class SMDCapacitor(BaseComponent):
+class SMDCapacitor(BaseTwoPort):
     """
     An SMD capacitor with an ESL-ESR-C series model.
     
@@ -205,6 +209,7 @@ class SMDCapacitor(BaseComponent):
             The package size of the SMD capacitor (e.g., 0402, 0603, etc.).
         """
         super().__init__()
+        self.package = package
         self.n_nodes = 2
         self.capacitance = capacitance
         
@@ -227,6 +232,8 @@ class SMDCapacitor(BaseComponent):
             self.esr = default_esr
             self.esl = default_esl
 
+        self.function = None
+
     def __on_connect__(self):
         """
         Connects the SMD capacitor in the network as a single
@@ -246,14 +253,15 @@ class SMDCapacitor(BaseComponent):
             z_series = self.esr + 1j * w * self.esl
             
             # Capacitive reactance = 1 / (jωC)
-            if self.capacitance > 0 and w > 0:
-                z_c = 1 / (1j * w * self.capacitance)
-            else:
-                # If zero capacitance, treat as infinite impedance
-                z_c = float('inf')
+            z_c = 1 / (1j * w * self.capacitance)
             
             # Total series: Z_total = z_series + z_c
             return z_series + z_c
-        
+        self.function = z_parasitic
         # Create the impedance component in the network
-        self.network.impedance(self.node(1), self.node(2), z_parasitic, component_type=ComponentType.CAPACITOR, display_value=self.capacitance)
+        self.network.impedance(self.node(1), self.node(2), z_parasitic, display_value=self.capacitance)\
+        .set_metadata(name=f'{self.package}SMD Capacitor',
+                      unit='F',
+                      value=self.capacitance,
+                      esr=self.esr,
+                      esl=self.esl)

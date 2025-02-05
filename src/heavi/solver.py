@@ -27,6 +27,152 @@ def solve_single_frequency_c_compiled(Is, Ys, Zs, indices, frequencies, progprox
     return Ss
 
 @njit(cache=True, parallel=True, fastmath=True)
+def solve_MNA_RF(As, Zs, port_indices, frequencies, progress_object):
+    """
+    Compute the S-parameter matrix for an RF network using Numba for acceleration.
+
+    Parameters
+    ----------
+    Is : numpy.ndarray
+        Current sources, complex-valued array of shape (n_nodes, n_ports, n_freqs).
+    Ys : numpy.ndarray
+        Admittance matrices, complex-valued array of shape (n_nodes, n_nodes, n_freqs).
+    Zs : numpy.ndarray
+        Source impedances, complex-valued array of shape (n_nodes, n_freqs).
+    port_indices : numpy.ndarray
+        Indices of the nodes corresponding to the ports of interest, integer array of shape (n_ports,).
+    frequencies : numpy.ndarray
+        Frequencies, float-valued array of shape (n_freqs,).
+
+    Returns
+    -------
+    S_parameters : numpy.ndarray
+        S-parameter matrix, complex-valued array of shape (n_ports, n_ports, n_freqs).
+    """
+    M = port_indices.shape[0]
+    p_gnd_nodes = port_indices[:,2]
+    p_out_nodes = port_indices[:,0]
+    p_int_nodes = port_indices[:,1]
+    num_freqs = len(frequencies)
+    NM = As.shape[0]
+    N = NM-M
+
+    # Initialize the S-parameter matrix
+    v_data = np.zeros((N, num_freqs), dtype=np.complex128)
+    S_parameters = np.zeros((M, M, num_freqs), dtype=np.complex128)
+    # x vector placeholder
+    xh = np.zeros((NM,), dtype=np.complex128)
+    zh = np.zeros((NM,), dtype=np.complex128)
+
+    for active_port_index in range(M):
+        for freq_idx in prange(num_freqs):
+            # Reset voltage vector
+            x = 0*xh
+            z = 0*zh
+
+            # Set 1V at the active port node
+            z[N+active_port_index] = 1
+
+            # Solve the system of equations for Vh[1:]
+            x[1:] = np.linalg.solve(As[1:,1:,freq_idx], z[1:]).astype(np.complex128)
+
+            Z_in = Zs[active_port_index, freq_idx]
+
+            v_data[:,freq_idx] = x[:N]
+
+            for port_out_idx in range(M):
+                node_out = p_out_nodes[port_out_idx]
+                Z_out = Zs[port_out_idx, freq_idx]
+
+                # Calculate scaling factor Q
+                Q = np.sqrt(np.abs(np.real(Z_in))) / np.sqrt(np.abs(np.real(Z_out)))
+
+                Iin = - x[N+active_port_index]
+                VRout = (x[p_out_nodes[port_out_idx]] - x[p_int_nodes[port_out_idx]])
+                Vout = x[p_out_nodes[port_out_idx]] - x[p_gnd_nodes[port_out_idx]]
+                Iout = -VRout/Z_out
+                # Compute numerator and denominator for S-parameter calculation
+                numerator = Vout - np.conj(Z_out) * Iout
+                denominator = (x[p_out_nodes[active_port_index]]-x[p_gnd_nodes[active_port_index]]) +  Z_in * Iin
+                # Compute S-parameter
+                S_parameters[port_out_idx, active_port_index, freq_idx] = Q * (numerator / denominator)
+            progress_object.update(1)
+    return v_data, S_parameters
+
+@njit(cache=True, parallel=True, fastmath=True)
+def solve_MNA_RF_nopgb(As, Zs, port_indices, frequencies):
+    """
+    Compute the S-parameter matrix for an RF network using Numba for acceleration.
+
+    Parameters
+    ----------
+    Is : numpy.ndarray
+        Current sources, complex-valued array of shape (n_nodes, n_ports, n_freqs).
+    Ys : numpy.ndarray
+        Admittance matrices, complex-valued array of shape (n_nodes, n_nodes, n_freqs).
+    Zs : numpy.ndarray
+        Source impedances, complex-valued array of shape (n_nodes, n_freqs).
+    port_indices : numpy.ndarray
+        Indices of the nodes corresponding to the ports of interest, integer array of shape (n_ports,).
+    frequencies : numpy.ndarray
+        Frequencies, float-valued array of shape (n_freqs,).
+
+    Returns
+    -------
+    S_parameters : numpy.ndarray
+        S-parameter matrix, complex-valued array of shape (n_ports, n_ports, n_freqs).
+    """
+    M = port_indices.shape[0]
+    p_gnd_nodes = port_indices[:,2]
+    p_out_nodes = port_indices[:,0]
+    p_int_nodes = port_indices[:,1]
+    num_freqs = len(frequencies)
+    NM = As.shape[0]
+    N = NM-M
+
+    # Initialize the S-parameter matrix
+    v_data = np.zeros((N, num_freqs), dtype=np.complex128)
+    S_parameters = np.zeros((M, M, num_freqs), dtype=np.complex128)
+    # x vector placeholder
+    xh = np.zeros((NM,), dtype=np.complex128)
+    zh = np.zeros((NM,), dtype=np.complex128)
+
+    for active_port_index in range(M):
+        for freq_idx in prange(num_freqs):
+            # Reset voltage vector
+            x = 0*xh
+            z = 0*zh
+
+            # Set 1V at the active port node
+            z[N+active_port_index] = 1
+
+            # Solve the system of equations for Vh[1:]
+            x[1:] = np.linalg.solve(As[1:,1:,freq_idx], z[1:]).astype(np.complex128)
+
+            Z_in = Zs[active_port_index, freq_idx]
+
+            v_data[:,freq_idx] = x[:N]
+
+            for port_out_idx in range(M):
+                node_out = p_out_nodes[port_out_idx]
+                Z_out = Zs[port_out_idx, freq_idx]
+
+                # Calculate scaling factor Q
+                Q = np.sqrt(np.abs(np.real(Z_in))) / np.sqrt(np.abs(np.real(Z_out)))
+
+                Iin = - x[N+active_port_index]
+                VRout = (x[p_out_nodes[port_out_idx]] - x[p_int_nodes[port_out_idx]])
+                Vout = x[p_out_nodes[port_out_idx]] - x[p_gnd_nodes[port_out_idx]]
+                Iout = -VRout/Z_out
+                # Compute numerator and denominator for S-parameter calculation
+                numerator = Vout - np.conj(Z_out) * Iout
+                denominator = (x[p_out_nodes[active_port_index]]-x[p_gnd_nodes[active_port_index]]) +  Z_in * Iin
+                # Compute S-parameter
+                S_parameters[port_out_idx, active_port_index, freq_idx] = Q * (numerator / denominator)
+    return v_data, S_parameters
+
+
+@njit(cache=True, parallel=True, fastmath=True)
 def compute_s_parameters(Is, Ys, Zs, port_indices, frequencies, progress_object):
     """
     Compute the S-parameter matrix for an RF network using Numba for acceleration.

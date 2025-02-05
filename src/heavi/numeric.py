@@ -32,7 +32,7 @@ class SimParam:
     
     def scalar(self) -> float:
         """Returns the scalar value of the parameter"""
-        return self(self._eval_f)
+        return float(self(self._eval_f))
     
     def initialize(self) -> None:
         """Initializes the parameter"""

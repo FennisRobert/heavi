@@ -1,6 +1,6 @@
 from .libgen import BaseComponent, BaseTwoPort
 from ..numeric import SimParam, parse_numeric, Function
-from ..rfcircuit import Component, Network, ComponentType
+from ..rfcircuit import Component
 import numpy as np
 
 class Inductor(BaseTwoPort):
@@ -29,8 +29,13 @@ class Inductor(BaseTwoPort):
         else:
             def Y(f: np.ndarray) -> np.ndarray:
                 return 1/(1j * 2 * np.pi * f * pL(f) + pR(f)) + 1j * 2 * np.pi * f * pC(f)
-        self.component = self.network.admittance(self.node(1), self.node(2), Function(Y), 
-                                                 component_type=ComponentType.INDUCTOR).set_metadata(inductance=self.inductance, parasitic_capacitance=self.parasitic_capacitance, parasitic_resistance=self.parasitic_resistance)
+        self.component = self.network.admittance(self.node(1), self.node(2), Function(Y))\
+                                                    .set_metadata(name='Lumped Inductor',
+                                                                  unit='H',
+                                                                  value=self.inductance,
+                                                                  inductance=self.inductance, 
+                                                                  parasitic_capacitance=self.parasitic_capacitance, 
+                                                                  parasitic_resistance=self.parasitic_resistance)
 
     
 class Capacitor(BaseTwoPort):
@@ -60,8 +65,11 @@ class Capacitor(BaseTwoPort):
             def Y(f: np.ndarray) -> np.ndarray:
                 return 1/(1/(1j * 2 * np.pi * f * pC(f)) + pR(f) + 1j * 2 * np.pi * f * pL(f))
         
-        self.component = self.network.admittance(self.node(1), self.node(2), Function(Y),
-                                                 component_type=ComponentType.CAPACITOR).set_metadata(capacitance=self.capacitance, parasitic_inductance=self.parasitic_inductance, parasitic_resistance=self.parasitic_resistance)
+        self.component = self.network.admittance(self.node(1), self.node(2), Function(Y))\
+                                                    .set_metadata(name='Lumped Capacitor',
+                                                                  unit='F',
+                                                                  value=self.capacitance,
+                                                                  capacitance=self.capacitance, parasitic_inductance=self.parasitic_inductance, parasitic_resistance=self.parasitic_resistance)
 
 class Resistor(BaseTwoPort):
 
@@ -91,8 +99,13 @@ class Resistor(BaseTwoPort):
             def Y(f: np.ndarray) -> np.ndarray:
                 return 1/(pR(f) + 1j * 2 * np.pi * f * pL(f)) + 1j * 2 * np.pi * f * pC(f)
 
-        self.component = self.network.admittance(self.node(1), self.node(2), Function(Y),
-                                                 component_type=ComponentType.RESISTOR).set_metadata(resistance=self.resistance, parasitic_capacitance=self.parasitic_capacitance, parasitic_inductance=self.parasitic_inductance)
+        self.component = self.network.admittance(self.node(1), self.node(2), Function(Y)) \
+                                                    .set_metadata(name='Lumped Resistor',
+                                                                  unit='Ω',
+                                                                  value=self.resistance,
+                                                                  resistance=self.resistance, 
+                                                                  parasitic_capacitance=self.parasitic_capacitance, 
+                                                                  parasitic_inductance=self.parasitic_inductance)
 
 class Impedance(BaseTwoPort):
 
@@ -102,8 +115,11 @@ class Impedance(BaseTwoPort):
         self.component: Component = None
 
     def __on_connect__(self):
-        self.component = self.network.impedance(self.node(1), self.node(2), self.impedance.inverse,
-                                                component_type=ComponentType.IMPEDANCE).set_metadata(impedance=self.impedance)
+        self.component = self.network.impedance(self.node(1), self.node(2), self.impedance.inverse)\
+                                                    .set_metadata(name='Lumped Impedance',
+                                                                  unit='Ω',
+                                                                  value=self.impedance,
+                                                                  impedance=self.impedance)
 
 class Admittance(BaseTwoPort):
     
@@ -113,8 +129,11 @@ class Admittance(BaseTwoPort):
         self.component: Component = None
 
     def __on_connect__(self):
-        self.component = self.network.admittance(self.node(1), self.node(2), self.admittance,
-                                                component_type=ComponentType.ADMITTANCE).set_metadata(admittance=self.admittance)
+        self.component = self.network.admittance(self.node(1), self.node(2), self.admittance)\
+                                                    .set_metadata(name='Lumped Admittance',
+                                                                  unit='Siemens',
+                                                                  value=self.admittance,
+                                                                  admittance=self.admittance)
 
 class TransmissionLineGrounded(BaseTwoPort):
     def __init__(self, Z0: float, length: float, er: float = 1):
@@ -128,7 +147,12 @@ class TransmissionLineGrounded(BaseTwoPort):
         pZ0 = parse_numeric(self.Z0)
         per = parse_numeric(self.er)
         plength = parse_numeric(self.length)
-        self.network.TL(self.node(1), self.node(2), lambda f: 2*np.pi*f/299792458 * np.sqrt(per(f)), plength, pZ0)
+        comp = self.network.TL(self.node(1), self.node(2), lambda f: 2*np.pi*f/299792458 * np.sqrt(per(f)), plength, pZ0)
+        comp.set_metadata(name='Transmission Line',
+                          unit='Ω',
+                          Z0=self.Z0,
+                          er=self.er,
+                          length=self.length)
 
 class TransmissionLine(BaseComponent):
 

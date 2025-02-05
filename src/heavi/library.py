@@ -1,5 +1,5 @@
 import numpy as np
-from .rfcircuit import Network, Node, ComponentType
+from .rfcircuit import Network, Node
 from typing import Union, Callable, Optional
 
 c0 = 299792458
