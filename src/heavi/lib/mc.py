@@ -1,11 +1,11 @@
 
-from ..component import BaseComponent
+from .libgen import BaseTwoPort
 from ..numeric import Random, SimParam, MonteCarlo
 from ..transformations import VSWR_to_S11, Z_to_S11
 import numpy as np
 
 
-class TransmissionLine(BaseComponent):
+class TransmissionLine(BaseTwoPort):
 
     def __init__(self, 
                  mcsim: MonteCarlo,
@@ -20,7 +20,6 @@ class TransmissionLine(BaseComponent):
                  nsigma: float = 3,
                  ):
         super().__init__()
-        self.n_nodes = 2
         self.mc: MonteCarlo = mcsim
 
         def kz(f):
@@ -40,8 +39,6 @@ class TransmissionLine(BaseComponent):
         self.Z0 = Z0
         
     def __on_connect__(self):
-        
-        
         self.network.n_port_S(self.gnd, [self.node(1), self.node(2)], 
                               [[self.fS11, self.fS12], [self.fS21, self.fS22]], 
                               self.Z0)

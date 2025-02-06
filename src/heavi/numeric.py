@@ -2,6 +2,7 @@ from __future__ import annotations
 import numpy as np
 from typing import Callable, Generator
 from itertools import product
+from .sparam import NDSparameters
 
 class Uninitialized:
     """A class to represent an uninitialized value"""
@@ -212,6 +213,10 @@ class ParameterSweep:
         self.index_series: list[tuple[int]] = []
         self._index: int = 0
         self._param_buffer: list = []
+        self._S_data: list[np.ndarray] = []
+        self._current_index: tuple[int] = None
+        self._mdim_data: NDSparameters = None
+        self._fdata: np.ndarray = None
     
     def lin(self, start: float, stop: float) -> ParameterSweep:
         """Adds a linear sweep of values to the parameter sweep.
@@ -271,8 +276,43 @@ class ParameterSweep:
         self._param_buffer = []
         return params
     
+    def submit(self, S: np.ndarray, fs: np.ndarray) -> ParameterSweep:
+        """Submits a set of S-parameters to the parameter sweep.
+        
+        Parameters:
+        -----------
+        S : np.ndarray
+            The S-parameters to submit.
+        """
+        self._S_data.append((self._current_index, S))
+        self._fdata = fs
+        return self
+
+    @property
+    def S(self) -> NDSparameters:
+        """Returns the S-parameters of the parameter sweep."""
+        if self._mdim_data is None:
+            self._mdim_data = self.generate_mdim()
+        return self._mdim_data
+    
+
+    def generate_mdim(self) -> NDSparameters:
+        """Generates a multi-dimensional array of S-parameters."""
+        shape = [len(dimension[0]) for dimension in self.sweep_dimensions]
+        s_proto = self._S_data[0][1]
+        nports = s_proto.shape[0]
+        ports = np.arange(1, nports+1)
+        #nfreqs = s_proto.shape[2]
+        S = np.zeros(shape + list(self._S_data[0][1].shape), dtype=np.complex128)
+        for index, s in self._S_data:
+            S[index] = s._S
+        NDS = NDSparameters(S, [np.array([dim._values for dim in dimension]) for dimension in self.sweep_dimensions] + [ports, ports, self._fdata])
+        return NDS
+
     def iterate(self) -> Generator[tuple[tuple[int], tuple[float]], None, None]:
         '''An iterator that first compiles the total.'''
+        self._S_data: list[np.ndarray] = []
+
         # Make a list of all dimensional index tuples as the product of the lengths of each dimension
         total = 1
         for dimension in self.sweep_dimensions:
@@ -290,6 +330,7 @@ class ParameterSweep:
         
         for ixs in indices:
             paramlist = []
+            self._current_index: tuple[int] = ixs
             # set the index of each dimensional Param object
             for i, params in zip(ixs, self.sweep_dimensions):
                 for param in params:

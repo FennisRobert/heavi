@@ -129,3 +129,13 @@ class BaseTwoPort(BaseComponent):
             return NotImplemented
         self.partial_connect(2, other)
         return other
+    
+class BaseThreePort(BaseComponent):
+
+    def __post_init__(self):
+        self.n_nodes = 3
+
+class BaseFourPort(BaseComponent):
+
+    def __post_init__(self):
+        self.n_nodes = 4

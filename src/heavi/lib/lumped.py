@@ -154,7 +154,7 @@ class TransmissionLineGrounded(BaseTwoPort):
                           er=self.er,
                           length=self.length)
 
-class TransmissionLine(BaseComponent):
+class TransmissionLine(BaseTwoPort):
 
     def __init__(self, Z0: float, length: float, er: float = 1):
         super().__init__()

@@ -1,16 +1,14 @@
 from .rfcircuit import Network, Node
 from .filtering import FilterType, BandType, CauerType, Filtering
-from .library import Library
+
 
 class Model(Network):
 
     def __init__(self, default_name: str = "Node", 
                  filter_library: Filtering = Filtering, 
-                 component_library: Library = Library,
                  suppress_loadbar: bool = False):
         super().__init__(default_name, suppress_loadbar=suppress_loadbar)
         self.filters: Filtering = filter_library(self)
-        self.lib: Library = component_library(self)
         self.numbered_nodes: dict[int, Node] = dict()
 
     def __call__(self, index: int) -> Node:
@@ -24,11 +22,9 @@ class QuickModel(Network):
 
     def __init__(self, default_name: str = "Node", 
                  filter_library: Filtering = Filtering, 
-                 component_library: Library = Library,
                  suppress_loadbar: bool = False):
         super().__init__(default_name, suppress_loadbar=suppress_loadbar)
         self.filters: Filtering = filter_library(self)
-        self.lib: Library = component_library(self)
 
     def LC(self, n1: Node, n2: Node, L: float, C: float) -> None:
         self.capacitor(n1, n2, C)

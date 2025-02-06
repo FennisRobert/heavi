@@ -25,6 +25,40 @@ ggplot_styles = {
 }
 plt.rcParams.update(ggplot_styles)
 
+def _gen_grid(xs: tuple, ys: tuple, N = 201) -> list[np.ndarray]:
+    xgrid = np.arange(xs[0], xs[1]+xs[2], xs[2])
+    ygrid = np.arange(ys[0], ys[1]+ys[2], ys[2])
+    xsmooth = np.logspace(np.log10(xs[0]+1e-8), np.log10(xs[1]), N)
+    ysmooth = np.logspace(np.log10(ys[0]+1e-8), np.log10(ys[1]), N)
+    ones = np.ones((N,))
+    lines = []
+    for x in xgrid:
+        lines.append((x*ones, ysmooth))
+        lines.append((x*ones, -ysmooth))
+    for y in ygrid:
+        lines.append((xsmooth, y*ones))
+        lines.append((xsmooth, -y*ones))
+        
+    return lines
+
+def _generate_grids(orders = (0, 0.5, 1, 2, 5, 10, 50,1e5), N=201) -> list[tuple[np.ndarray, np.ndarray]]:
+    lines = []
+    xgrids = orders
+    for o1, o2 in zip(xgrids[:-1], xgrids[1:]):
+        step = o2/10
+        lines += _gen_grid((0, o2, step), (0, o2, step), N)   
+    return lines
+
+def _smith_transform(lines: list[tuple[np.ndarray, np.ndarray]]) -> list[tuple[np.ndarray, np.ndarray]]:
+    new_lines = []
+    for line in lines:
+        x, y = line
+        z = x + 1j*y
+        new_z = (z-1)/(z+1)
+        new_x = new_z.real
+        new_y = new_z.imag
+        new_lines.append((new_x, new_y))
+    return new_lines
 
 def hintersections(x, y, level):
 
@@ -61,8 +95,35 @@ def plot(x: np.ndarray, y: np.ndarray) -> None:
     plt.show()
 
 
-def smithplotSparam(f, S):
-    pass
+def smith(f, S):
+    if not isinstance(S, list):
+        Ss = [S]
+    else:
+        Ss = S
+    
+    fig, ax = plt.subplots()
+    for line in _smith_transform(_generate_grids()):
+        ax.plot(line[0], line[1], color='grey', alpha=0.3, linewidth=0.7)
+    p = np.linspace(0,2*np.pi,101)
+    ax.plot(np.cos(p), np.sin(p), color='black', alpha=0.5)
+    # Add important numbers for the Impedance Axes
+    # X and Y values (0, 0.5, 1, 2, 10, 50)
+    for i in [0, 0.2, 0.5, 1, 2, 10]:
+        z = i + 1j*0
+        G = (z-1)/(z+1)
+        ax.annotate(f"{i}", (G.real, G.imag), color='black', fontsize=8)
+    for i in [0, 0.2, 0.5, 1, 2, 10]:
+        z = 0 + 1j*i
+        G = (z-1)/(z+1)
+        ax.annotate(f"{i}", (G.real, G.imag), color='black', fontsize=8)       
+        ax.annotate(f"{-i}", (G.real, -G.imag), color='black', fontsize=8)  
+    for s in Ss:
+        ax.plot(s.real, s.imag, color='blue')
+    ax.grid(False)
+    ax.axis('equal')
+    plt.show()
+
+
 
 def plot_s_parameters(f, S, dblim=[-80, 5], 
                xunit="GHz", 

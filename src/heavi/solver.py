@@ -56,47 +56,46 @@ def solve_MNA_RF(As, Zs, port_indices, frequencies, progress_object):
     num_freqs = len(frequencies)
     NM = As.shape[0]
     N = NM-M
-
+    
+    subA = As[1:,1:,:]
     # Initialize the S-parameter matrix
     v_data = np.zeros((N, num_freqs), dtype=np.complex128)
     S_parameters = np.zeros((M, M, num_freqs), dtype=np.complex128)
     # x vector placeholder
-    xh = np.zeros((NM,), dtype=np.complex128)
-    zh = np.zeros((NM,), dtype=np.complex128)
+    
 
     for active_port_index in range(M):
         for freq_idx in prange(num_freqs):
             # Reset voltage vector
-            x = 0*xh
-            z = 0*zh
-
+            x = np.zeros((NM,), dtype=np.complex128)
+            z = np.zeros((NM-1,), dtype=np.complex128)
             # Set 1V at the active port node
-            z[N+active_port_index] = 1
-
+            z[N + active_port_index - 1] = 1
             # Solve the system of equations for Vh[1:]
-            x[1:] = np.linalg.solve(As[1:,1:,freq_idx], z[1:]).astype(np.complex128)
-
+            x[1:] = np.linalg.lstsq(subA[:,:,freq_idx], z)[0].astype(np.complex128)
+            #x[1:] = np.linalg.pinv(subA[:,:,freq_idx]) @ z
             Z_in = Zs[active_port_index, freq_idx]
 
             v_data[:,freq_idx] = x[:N]
 
+            V1 = x[p_out_nodes[active_port_index]]
+            V2 = x[p_gnd_nodes[active_port_index]]
+            V3 = x[N+active_port_index]
+
             for port_out_idx in range(M):
-                node_out = p_out_nodes[port_out_idx]
+    
                 Z_out = Zs[port_out_idx, freq_idx]
-
-                # Calculate scaling factor Q
-                Q = np.sqrt(np.abs(np.real(Z_in))) / np.sqrt(np.abs(np.real(Z_out)))
-
-                Iin = - x[N+active_port_index]
-                VRout = (x[p_out_nodes[port_out_idx]] - x[p_int_nodes[port_out_idx]])
-                Vout = x[p_out_nodes[port_out_idx]] - x[p_gnd_nodes[port_out_idx]]
-                Iout = -VRout/Z_out
                 # Compute numerator and denominator for S-parameter calculation
-                numerator = Vout - np.conj(Z_out) * Iout
-                denominator = (x[p_out_nodes[active_port_index]]-x[p_gnd_nodes[active_port_index]]) +  Z_in * Iin
+                Vo1 = x[p_out_nodes[port_out_idx]]
+                Vo2 = x[p_gnd_nodes[port_out_idx]]
+                Vo3 = x[p_int_nodes[port_out_idx]]
+                numerator = (Vo1 - Vo2) + np.conj(Z_out) * (Vo1 - Vo3)/Z_out
+                denominator = (V1-V2) -  Z_in * V3
                 # Compute S-parameter
-                S_parameters[port_out_idx, active_port_index, freq_idx] = Q * (numerator / denominator)
+                S_parameters[port_out_idx, active_port_index, freq_idx] = (numerator / denominator)*np.sqrt(np.abs(np.real(Z_in))) / np.sqrt(np.abs(np.real(Z_out)))
+            
             progress_object.update(1)
+
     return v_data, S_parameters
 
 @njit(cache=True, parallel=True, fastmath=True)

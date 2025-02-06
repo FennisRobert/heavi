@@ -2,7 +2,7 @@
 from __future__ import annotations
 import numpy as np
 from enum import Enum
-from ..component import BaseComponent
+from .libgen import BaseComponent
 from ..rfcircuit import Network, Node
 from scipy.optimize import root_scalar
 from loguru import logger
