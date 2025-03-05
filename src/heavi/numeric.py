@@ -3,6 +3,41 @@ import numpy as np
 from typing import Callable, Generator
 from itertools import product
 from .sparam import NDSparameters
+import inspect
+from functools import wraps
+
+def _num_args(func):
+    sig = inspect.signature(func)
+    params = sig.parameters
+    return len(params)
+
+
+
+TEN_POWERS = {
+    -12: "p",
+    -9: "n",
+    -6: "u",
+    -3: "m",
+    0: "",
+    3: "k",
+    6: "M",
+    9: "T",
+    12: "P",
+}
+
+
+def _get_power(number: float):
+    tp = np.log10(np.abs(number))
+    v = np.floor(tp / 3) * 3
+    v = min(12, max(-12, v))
+    v2 = number / (10**v)
+    return v2, v
+
+def format_value_units(value: float, unit: str) -> str:
+    """ Formats a value with units for display. """
+    
+    v, p = _get_power(value)
+    return f"{v:.2f} {TEN_POWERS[p]}{unit}"
 
 class Uninitialized:
     """A class to represent an uninitialized value"""
@@ -24,16 +59,22 @@ class Uninitialized:
     def __sub__(self, other):
         raise ValueError("Uninitialized value") 
     
+
 class SimParam:
     _eval_f = 1e9
 
+    def __init__(self, unit=''):
+        self.unit = ''
+        self._inf = np.inf
+        
+
     @property
     def value(self) -> float:
-        return self(self._eval_f)
+        return self(0)
     
     def scalar(self) -> float:
         """Returns the scalar value of the parameter"""
-        return float(self(self._eval_f))
+        return self.value
     
     def initialize(self) -> None:
         """Initializes the parameter"""
@@ -41,7 +82,7 @@ class SimParam:
 
     def __call__(self, f: np.ndarray) -> np.ndarray:
         """Returns the value of the parameter at a given frequency"""
-        return np.ones_like(f) * self._value
+        return np.nan_to_num(np.ones_like(f) * self._value, posinf=self._inf, neginf=-self._inf)
     
     def __repr__(self) -> str:
         """Returns a string representation of the parameter"""
@@ -49,63 +90,73 @@ class SimParam:
     
     def negative(self) -> SimParam:
         """Returns the negative of the parameter"""
-        return Function(lambda f: -self(f))
+        return Function(lambda f: -self.sp(f))
     
     def inverse(self) -> SimParam:
         """Returns the inverse of the parameter"""
-        return Function(lambda f: 1/self(f))
+        return Function(lambda f: 1/self.sp(f))
     
 class Scalar(SimParam):
     """A class to represent a scalar value"""
 
-    def __init__(self, value: float):
+    def __init__(self, value: float, unit: str = '', inf: float = np.inf):
         self._value = value
-
+        self._inf = inf
+        self.unit = unit
+    
     def __repr__(self) -> str:
         return f"SimValue({self._value})"
     
-    def negative(self) -> Scalar:
+    def negative(self) -> SimParam:
         """Returns the negative of the scalar"""
         return Scalar(-self._value)
     
-    def inverse(self) -> Scalar:
+    def inverse(self) -> SimParam:
         """Returns the inverse of the scalar"""
         return Scalar(1/self._value)
+
     
 class Negative(SimParam):
     """A class to represent the negative of a parameter"""
 
-    def __init__(self, value: Scalar):
-        self._value: Scalar = value
+    def __init__(self, simparam: SimParam, inf: float = np.inf):
+        self._simparam: SimParam = simparam
+        self.unit = simparam.unit
+        self._inf = inf
 
     def __repr__(self) -> str:
-        return f"Negative({self._value})"
+        return f"Negative({self._simparam})"
     
     def __call__(self, f: np.ndarray) -> np.ndarray:
-        return -self._value(f)
+        return np.nan_to_num(-self._simparam(f), posinf=self._inf, neginf=-self._inf)
     
-    def negative(self) -> Scalar:
+    def negative(self) -> SimParam:
         """Returns the negative of the negative"""
-        return self._value
+        return self._simparam
 
 class Inverse(SimParam):
     
-    def __init__(self, value: Scalar):
-        self._value: Scalar = value
+    def __init__(self, simparam: SimParam, inf: float = np.inf):
+        self._simparam: SimParam = simparam
+        self.unit = simparam.unit
+        self._inf = inf
 
     def __repr__(self) -> str:
-        return f"Inverse({self._value})"
+        return f"Inverse({self._simparam})"
     
     def __call__(self, f: np.ndarray) -> np.ndarray:
-        return 1/self._value(f)
+        return np.nan_to_num(1/self._simparam(f), posinf=self._inf, neginf=-self._inf)
     
-    def inverse(self) -> Scalar:
+    def inverse(self) -> SimParam:
         """Returns the inverse of the inverse"""
-        return self._value
+        return self._simparam
     
 class Function(SimParam):
 
-    def __init__(self, function: Callable[[np.ndarray], np.ndarray]):
+    def __init__(self, 
+                 function: Callable[[np.ndarray], np.ndarray], 
+                 unit: str ='',
+                 inf: float = np.inf):
         """A class to represent a function of frequency.
         
         Parameters:
@@ -113,17 +164,20 @@ class Function(SimParam):
         function : Callable[[np.ndarray], np.ndarray]
             The function of frequency.
         """
-        self._function = function
+        self._func = function
+        self._inf = inf
+        self.unit: str = unit
+
+    def __call__(self, f: np.ndarray) -> np.ndarray:
+        return np.nan_to_num(self._func(f), posinf=self._inf, neginf=-self._inf)
 
     def __repr__(self) -> str:
-        return f"Function({self._function})"
+        return f"Function({self._func})"
     
-    def __call__(self, f: np.ndarray) -> np.ndarray:
-        return self._function(f)
     
 class Random(SimParam):
 
-    def __init__(self, randomizer: Callable):
+    def __init__(self, randomizer: Callable, unit: str = '', inf: float = np.inf):
         """A class to represent a random value.
         
         Parameters:
@@ -136,15 +190,14 @@ class Random(SimParam):
         self._value = Uninitialized()
         self._mean = None
         self._std = None
+        self._inf = inf
+        self.unit = unit
 
     def initialize(self):
         self._value = self._randomizer()
 
     def __repr__(self):
         return f"Gaussian({self._mean}, {self._std})"   
-    
-    def __call__(self, f):
-        return self._value * np.ones_like(f)
     
     def negative(self) -> SimParam:
         return Negative(self)
@@ -160,11 +213,13 @@ class Param(SimParam):
     values : np.ndarray
         An array of values to sweep over
     """
-    def __init__(self, values: np.ndarray):
+    def __init__(self, values: np.ndarray, unit: str = '', inf: float = np.inf):
         super().__init__()
         self._values = values
         self._index: int = 0
         self._value = Uninitialized()
+        self._inf = inf
+        self.unit: str = unit
 
     @staticmethod
     def lin(start: float, stop: float, Nsteps: int) -> Param:
@@ -184,7 +239,7 @@ class Param(SimParam):
         return f"Param({self._values[0]}, ..., {self._values[-1]})"
     
     def __call__(self, f):
-        return self._value * np.ones_like(f)
+        return np.nan_to_num(self._value * np.ones_like(f), posinf=self._inf, neginf=-self._inf)
     
     def set_index(self, index: int):
         """Sets the index of the parameter.
@@ -302,7 +357,6 @@ class ParameterSweep:
         s_proto = self._S_data[0][1]
         nports = s_proto.shape[0]
         ports = np.arange(1, nports+1)
-        #nfreqs = s_proto.shape[2]
         S = np.zeros(shape + list(self._S_data[0][1].shape), dtype=np.complex128)
         for index, s in self._S_data:
             S[index] = s._S
@@ -392,8 +446,9 @@ class MonteCarlo:
             for random in self._random_numbers:
                 random.initialize()
             yield i
-    
-def parse_numeric(value: float | Scalar | Callable, inverse: bool = False) -> SimParam:
+
+
+def enforce_simparam(value: float | SimParam | Callable, inverse: bool = False, unit: str = '') -> SimParam:
     """Parses a numeric value to a SimParam object.
 
     Parameters:
@@ -415,14 +470,33 @@ def parse_numeric(value: float | Scalar | Callable, inverse: bool = False) -> Si
     elif isinstance(value, Callable):
         if inverse:
             return Function(lambda f: 1/value(f))
-        return Function(value)
+        return Function(value, unit=unit)
     elif isinstance(value, (int, float, complex)):
         if inverse:
-            Scalar(1/value)
-        return Scalar(value)
+            return Scalar(1/value, unit=unit)
+        return Scalar(value, unit=unit)
     else:
         raise ValueError(f"Invalid value type: {type(value)}")
     
+
+def ensure_simparam(func):
+    # Get the function signature
+    sig = inspect.signature(func)
+
+    @wraps(func)
+    def wrapper(*args, **kwargs):
+        bound_args = sig.bind(*args, **kwargs)
+        bound_args.apply_defaults()
+
+        # Convert arguments to float if their type hint is complex or float
+        for name, value in bound_args.arguments.items():
+            param = sig.parameters[name]
+            if param.annotation in (float, SimParam, float | SimParam, SimParam | float):
+                bound_args.arguments[name] = enforce_simparam(value)
+
+        return func(*bound_args.args, **bound_args.kwargs)
+    return wrapper
+
 def set_print_frequency(frequency: float) -> None:
     """Sets the frequency at which the simulation parameters are evaluated for printing.
     

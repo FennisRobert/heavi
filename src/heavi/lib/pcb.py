@@ -219,7 +219,7 @@ class NodeForwarder:
 
     def terminate(self, Z0: float) -> Node:
         """ Terminate the path with a resistor. """
-        return self.pcb.network.terminal(self.node, Z0).node
+        return self.pcb.network.terminal(self.node, Z0).output_node
     
     def straight(self, L: float, Z0: float = None, width: float = None) -> NodeForwarder:
         """ Create a straight path. """

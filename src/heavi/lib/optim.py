@@ -21,10 +21,14 @@ class OptimVar(SimParam):
         A function that maps the variable to a different space. If not specified, the variable is used as
         is. The function should take a float and return a float.
     """
-    def __init__(self, initial_value: float, bounds: tuple[float, float] = None, mapping: Callable = None):
+    def __init__(self, initial_value: float, 
+                 bounds: tuple[float, float] = None, 
+                 mapping: Callable = None,
+                 unit: str = ''):
         self._value = initial_value
         self.bounds = bounds
         self.mapping: Callable = mapping
+        self.unit: str = unit
 
     def set(self, value: float):
         self._value = value
@@ -230,7 +234,10 @@ class Optimiser:
         """ Get the initial values of the optimisation variables."""
         return np.array([p.value for p in self. parameters])
 
-    def add_param(self, initial, bounds: tuple[float, float] = None, mapping: Callable = None) -> OptimVar:
+    def add_param(self, initial, 
+                  bounds: tuple[float, float] = None, 
+                  mapping: Callable = None,
+                  unit: str = '') -> OptimVar:
         """ Add an optimisation variable.
         
         This method adds an optimisation variable to the optimiser.
@@ -250,7 +257,7 @@ class Optimiser:
         OptimVar
             The optimisation variable.
         """
-        param = OptimVar(initial, bounds=bounds, mapping=mapping)
+        param = OptimVar(initial, bounds=bounds, mapping=mapping, unit=unit)
         self.parameters.append(param)
         return param
     
@@ -278,9 +285,9 @@ class Optimiser:
             The capacitor parameter.
         """
         if not logscale:
-            return self.add_param(10**initial, (1*10**limits[0], 1*10**limits[1]))
+            return self.add_param(10**initial, (1*10**limits[0], 1*10**limits[1]), unit='f')
         else:
-            return self.add_param(initial, limits, mapping= lambda x: 10**(x))
+            return self.add_param(initial, limits, mapping= lambda x: 10**(x), unit='f')
     
     def ind(self, 
             logscale: bool = True,
@@ -301,9 +308,9 @@ class Optimiser:
             The inductor parameter.
         """
         if not logscale:
-            return self.add_param(10**initial, (10**(limits[0]),10**(limits[1])))
+            return self.add_param(10**initial, (10**(limits[0]),10**(limits[1])), unit='H')
         else:
-            return self.add_param(initial, limits, mapping= lambda x: 10**(x))
+            return self.add_param(initial, limits, mapping= lambda x: 10**(x), unit='H')
     
     def add_requirement(self, req: Requirement):
         """ Add a requirement to the optimiser.

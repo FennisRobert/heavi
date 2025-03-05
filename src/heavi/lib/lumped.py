@@ -1,5 +1,5 @@
 from .libgen import BaseComponent, BaseTwoPort
-from ..numeric import SimParam, parse_numeric, Function
+from ..numeric import SimParam, enforce_simparam, Function
 from ..rfcircuit import Component
 import numpy as np
 
@@ -13,9 +13,9 @@ class Inductor(BaseTwoPort):
         self.component: Component = None
 
     def __on_connect__(self):
-        pL = parse_numeric(self.inductance)
-        pC = parse_numeric(self.parasitic_capacitance)
-        pR = parse_numeric(self.parasitic_resistance)
+        pL = enforce_simparam(self.inductance)
+        pC = enforce_simparam(self.parasitic_capacitance)
+        pR = enforce_simparam(self.parasitic_resistance)
 
         if pC == 0 and pR == 0:
             def Y(f: np.ndarray) -> np.ndarray:
@@ -48,9 +48,9 @@ class Capacitor(BaseTwoPort):
         self.component: Component = None
 
     def __on_connect__(self):
-        pC = parse_numeric(self.capacitance)
-        pL = parse_numeric(self.parasitic_inductance)
-        pR = parse_numeric(self.parasitic_resistance)
+        pC = enforce_simparam(self.capacitance)
+        pL = enforce_simparam(self.parasitic_inductance)
+        pR = enforce_simparam(self.parasitic_resistance)
 
         if pL == 0 and pR == 0:
             def Y(f: np.ndarray) -> np.ndarray:
@@ -82,9 +82,9 @@ class Resistor(BaseTwoPort):
 
 
     def __on_connect__(self):
-        pR = parse_numeric(self.resistance)
-        pC = parse_numeric(self.parasitic_capacitance)
-        pL = parse_numeric(self.parasitic_inductance)
+        pR = enforce_simparam(self.resistance)
+        pC = enforce_simparam(self.parasitic_capacitance)
+        pL = enforce_simparam(self.parasitic_inductance)
 
         if pC == 0 and pL == 0:
             def Y(f: np.ndarray) -> np.ndarray:
@@ -111,7 +111,7 @@ class Impedance(BaseTwoPort):
 
     def __init__(self, impedance: float | SimParam):
         super().__init__()
-        self.impedance: SimParam = parse_numeric(impedance)
+        self.impedance: SimParam = enforce_simparam(impedance)
         self.component: Component = None
 
     def __on_connect__(self):
@@ -125,7 +125,7 @@ class Admittance(BaseTwoPort):
     
     def __init__(self, admittance: float | SimParam):
         super().__init__()
-        self.admittance: SimParam = parse_numeric(admittance)
+        self.admittance: SimParam = enforce_simparam(admittance)
         self.component: Component = None
 
     def __on_connect__(self):
@@ -144,9 +144,9 @@ class TransmissionLineGrounded(BaseTwoPort):
         self.component: Component = None
 
     def __on_connect__(self):
-        pZ0 = parse_numeric(self.Z0)
-        per = parse_numeric(self.er)
-        plength = parse_numeric(self.length)
+        pZ0 = enforce_simparam(self.Z0)
+        per = enforce_simparam(self.er)
+        plength = enforce_simparam(self.length)
         comp = self.network.TL(self.node(1), self.node(2), lambda f: 2*np.pi*f/299792458 * np.sqrt(per(f)), plength, pZ0)
         comp.set_metadata(name='Transmission Line',
                           unit='Ω',
@@ -164,9 +164,9 @@ class TransmissionLine(BaseTwoPort):
         self.component: Component = None
 
     def __on_connect__(self):
-        pZ0 = parse_numeric(self.Z0)
-        per = parse_numeric(self.er)
-        plength = parse_numeric(self.length)
+        pZ0 = enforce_simparam(self.Z0)
+        per = enforce_simparam(self.er)
+        plength = enforce_simparam(self.length)
         self.network.TL(self.node(1), self.node(2), lambda f: 2*np.pi*f/299792458 * np.sqrt(per(f)), plength, pZ0)
 
 L = Inductor

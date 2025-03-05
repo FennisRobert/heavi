@@ -1,5 +1,5 @@
 from .libgen import BaseComponent, BaseTwoPort, BaseFourPort, BaseThreePort
-from ..numeric import SimParam, parse_numeric
+from ..numeric import SimParam, enforce_simparam
 from ..rfcircuit import Node
 import numpy as np
 from ..filtering import impedance_transformer_cheb

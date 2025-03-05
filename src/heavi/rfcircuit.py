@@ -1,15 +1,15 @@
 from __future__ import annotations
 from enum import Enum
-from typing import List, Callable
+from typing import List, Callable, Literal
 from dataclasses import dataclass
 from collections import defaultdict
 import numpy as np
-from .solver import solve_MNA_RF, solve_MNA_RF_nopgb
+from .solver import solve_MNA_RF, solve_MNA_RF_nopgb, solve_MNA_DC
 import numba_progress as nbp
 from loguru import logger
 
 from .sparam import Sparameters
-from .numeric import Scalar, parse_numeric, Function, SimParam
+from .numeric import SimParam, enforce_simparam, Function, SimParam, Scalar, ensure_simparam
 
 TEN_POWERS = {
     -12: "p",
@@ -23,15 +23,37 @@ TEN_POWERS = {
     12: "P",
 }
 
+def _stack(matrix: np.ndarray, vector: np.ndarray) -> np.ndarray:
+    ''' Copies a 2D matrix along the 3rd using the size of the provided vector.
+     
+    >>> _stack(np.array([[1,2],[3,4]]), np.array([1,2,3])).shape
+    (2, 2, 3)
+      
+    '''
+    if vector is None or isinstance(vector, (int, float)):
+        return matrix
+
+    out = np.tile(np.expand_dims(matrix, axis=2), (1,1,vector.shape[0]))
+
+    return out
+
 def _get_power(number: float):
-    tp = np.log10(np.abs(number))
-    v = np.floor(tp / 3) * 3
-    v = min(12, max(-12, v))
-    v2 = number / (10**v)
-    return v2, v
+    ''' Splits a float into a base value and the power of 10 in groups of 1000.
+    
+    >>> _get_power(4532)
+    (4.532, 3)
+    '''
+    N_thousands = np.floor(np.log10(np.abs(number)) / 3) * 3
+    N_thousands = min(12, max(-12, N_thousands))
+    base_number = number / (10**N_thousands)
+    return base_number, N_thousands
 
 def format_value_units(value: float, unit: str) -> str:
-    """ Formats a value with units for display. """
+    """ Formats a value with units for display. 
+    
+    >>> format_value_units(4532, 'Hz')
+    '4.53 kHz'
+    """
     
     v, p = _get_power(value)
     return f"{v:.2f} {TEN_POWERS[p]}{unit}"
@@ -65,6 +87,7 @@ def Z0_VSWR(Z0: float, max_vswr: float) -> float:
     
     return impedance
 
+_TWO_MAT = np.array([[1,-1],[-1,1]])
 
 class Components:
     RESISTOR = {'name': 'Resistor', 'unit': 'Ω'}
@@ -75,29 +98,15 @@ class Components:
     IMPEDANCE = {'name': 'Impedance', 'unit': 'Ω'}
     ADMITTANCE = {'name': 'Admittance', 'unit': 'G'}
     TRANSMISSIONLINE = {'name': 'Transmission Line', 'unit': 'Ω'}
-    NPORT = {'name': 'N-Port', 'unit': 'None'}
+    NPORT = {'name': 'N-Port', 'unit': 'Ω'}
     CUSTOM = {'name': 'Custom', 'unit': 'None'}
 
-#     @property
-#     def unit(self):
-#         unitdict = {
-#             self.UNDEFINED: "__",
-#             self.RESISTOR: "Ohm",
-#             self.CAPACITOR: "F",
-#             self.INDUCTOR: "H",
-#             self.CURRENTSOURCE: "A",
-#             self.VOLTAGESOURCE: "V",
-#             self.IMPEDANCE: "Ohm",
-#             self.ADMITTANCE: "G",
-#             self.TRANSMISSIONLINE: "Ohm",
-#             self.NPORT: "None",
-#         }
-#         return unitdict[self]
+##### CONSTANTS
 
-
-twopi = 2 * np.pi
-pi = np.pi
-
+TWOPI = np.float64(2 * np.pi)
+PI = np.pi
+GEN_NULL = Scalar(0)
+NPZERO = np.float64(0)
 
 def randphase():
     """ Returns a complex number with a random phase. """
@@ -127,7 +136,7 @@ class Node:
         if self._gnd:
             return 'Node[GND]'
         if self._linked is None:
-            return f"Node[{self._index}]"
+            return f"{self.name}[{self._index}]"
         else:
             return f"LinkedNode[{self._index}>{self._linked._index}]"
     
@@ -157,32 +166,79 @@ class Node:
     
     def __gt__(self, other: Node) -> Node:
         if isinstance(other, Node):
-            #logger.info(f'Merged {self} with {other}')
             self._linked = other
             return other
         return NotImplemented
-    
+
+
 
 @dataclass
 class ComponentFunction:
     """ ComponentFunction class for the Component object. """
-    node_list: list[Node]
-    simval: Scalar
-    as_matrix: bool = False
-
+    idx_generators: list[list[Node]]
+    function: SimParam
+    
     @property
-    def matrix_slice(self) -> tuple:
-        """ Returns a tuple of slices for the matrix indices corresponding to the nodes. """
-        if self.as_matrix:
-            idx = [node.index for node in self.node_list]
-            return np.ix_(idx,idx) + (slice(None),)
-        if len(self.node_list) == 1:
-            return (self.node_list[0].index, slice(None))
-        elif len(self.node_list) == 2:
-            return (self.node_list[0].index, self.node_list[1].index, slice(None))
-
+    def _slice(self):
+        return self.gen_slice()
+    
+    def gen_slice(self):
+        if len(self.idx_generators) == 1:
+            return np.ix_([n.index for n in self.idx_generators[0]])
+        else:
+            return np.ix_(*[[n.index for n in nodes] for nodes in self.idx_generators])
         
-class Component:
+
+class Compilable:
+
+    is_linear: bool = False
+
+    def _get_functions(self, type: Literal['G','B','C','D','I']) -> list[ComponentFunction]:
+        return [f for f in self.functions if f.matrix == type]
+
+    def _generate_compiler(self, simulation: Literal['SP','DC','AC']) -> Callable:
+        '''Generates a callable that will plug in the components matrix entries for a given frequency.'''
+
+
+        if simulation == 'SP':
+            def compiler(matrix: np.ndarray, f: float) -> np.ndarray:
+                for function in self.functions:
+                    matrix[function.gen_slice()] += function.function(f)
+                return matrix
+        elif simulation == 'DC':
+            def compiler(matrix: np.ndarray, v: np.ndarray) -> np.ndarray:
+                for function in self.functions:
+                    matrix[function.gen_slice()] += function.function(NPZERO)
+                return matrix
+        elif simulation == 'AC':
+            def compiler(matrix: np.ndarray, f: float) -> np.ndarray:
+                for function in self.functions:
+                    matrix[function.gen_slice()] += function.function(f)
+                return matrix
+        return compiler
+
+   
+    def _generate_I_compiler(self, simulation: Literal['SP','DC','AC']) -> Callable:
+        '''Generates a callable that will plug in the components matrix entries for a given frequency.'''
+        if simulation == 'SP':
+            def compiler(matrix: np.ndarray, f: float) -> np.ndarray:
+                for function in self.source_functions:
+                    matrix[function.gen_slice()] += function.function(f)
+                return matrix
+        elif simulation == 'DC':
+            def compiler(matrix: np.ndarray, v: np.ndarray) -> np.ndarray:
+                for function in self.source_functions:
+                    matrix[function.gen_slice()] += function.function(NPZERO).squeeze()
+                return matrix
+        elif simulation == 'AC':
+            def compiler(matrix: np.ndarray, f: float) -> np.ndarray:
+                for function in self.source_functions:
+                    matrix[function.gen_slice()] += function.function(f)
+                return matrix
+        return compiler
+    
+
+class Component(Compilable):
     """ Component class for the Network object. 
     This class represents a component in the network, such as a resistor, capacitor, inductor, etc.
     
@@ -190,28 +246,52 @@ class Component:
     ----------
     nodes : list[Node]
         A list of Node objects corresponding to the nodes the component is connected to.
-    functionlist : list[ComponentFunction]
+    functions : list[ComponentFunction]
         A list of ComponentFunction objects corresponding to the functions of the component.
-    type : ComponentType
-        The type of the component.
-    display_value : float
+    source_functions : list[ComponentFunction]
+        A list of ComponentFunction objects corresponding to the source functions of the component.
+    component_value : SimParam
         The value of the component.
+    non_linear : bool
+        A boolean indicating if the component is non-linear.
 
     """
+    is_linear: bool = True
     def __init__(
-        self, nodes, functionlist, component_value: Scalar = None
+        self, nodes: list[Node], 
+        functions: list[ComponentFunction] = None, 
+        source_functions: list[ComponentFunction] = None,
+        component_value: SimParam = None,
     ):
         self.nodes: list[Node] = nodes
-        self.functionlist: list[ComponentFunction] = functionlist
-        self._component_value: Scalar = parse_numeric(component_value)
-        self._impedance: Scalar = None
+        self.functions: list[ComponentFunction] = functions
+        self.source_functions: list[ComponentFunction] = source_functions
+        self._component_value: SimParam = enforce_simparam(component_value)
+        self._impedance: SimParam = None
         self.meta_data: dict[str, str] = dict()
+
+        if self.source_functions is None:
+            self.source_functions = []
+
+        if self.functions is None:
+            self.functions = []
 
         self.component_name: str = None
         self.component_unit: str = None
 
+    def print_data(self) -> None:
+        '''Prints the component data.'''
+        print('')
+        print(f'Component: {self.component_name}')
+        print(f'Nodes: {[str(n) for n in self.nodes]}')
+        print(f'Value: {self.display_value}')
+        for key, value in self.meta_data.items():
+            print(f'{key}: {format_value_units(value.scalar(), value.unit)}')
+        print('')
+
     @property
     def display_value(self) -> str:
+        '''Returns the value of the component with units.'''
         return format_value_units(self._component_value.scalar(), self.component_unit)
     
     def __str__(self) -> str:
@@ -220,40 +300,82 @@ class Component:
     def __repr__(self) -> str:
         value = self.display_value
         return f"{self.component_name}: {[str(n) for n in self.nodes]}, value={value}"
-        
+    
     def set_metadata(self, name: str = 'Component', unit: str = '', value: float | SimParam = None, **kwargs: dict[str, str]) -> Component:
+        '''Sets the metadata for the component.'''
         self.component_name = name
         self.component_unit = unit
         if value is not None:
-            self._component_value = parse_numeric(value)
-        self.meta_data.update(kwargs)
+            self._component_value = enforce_simparam(value)
+        for key, value in kwargs.items():
+            self.meta_data[key] = enforce_simparam(value)
         return self
     
-    def _generate_compiler_function(self) -> Callable:
-        '''Generates a callable that will plug in the components matrix entries for a given frequency.'''
-        def compiler(matrix: np.ndarray, f: float) -> np.ndarray:
-            for function in self.functionlist:
-                matrix[function.matrix_slice] += function.simval(f)
-            return matrix
-        return compiler
+class LinearComponent(Component):
+    is_linear: bool = True
 
+class NonLinearComponent(Component):
+    is_linear: bool = False
+
+    def __init__(
+        self, nodes: list[Node], 
+        functions: list[ComponentFunction] = None, 
+        source_functions: list[ComponentFunction] = None,
+        component_value: SimParam = None,
+        v_function: Callable[[np.ndarray], np.ndarray] = None,
+    ):
+        super().__init__(nodes, functions, source_functions, component_value)
+        self.v_function = v_function
+        
+    
 @dataclass
-class Source:
+class Source(Compilable):
     ground: Node
-    node: Node
     source_node: Node
-    source_impedance: Component
-    dc_voltage: float = 1
-    ac_voltage: float = 1
+    output_node: Node = None
+    source_impedance: Component = None
+    small_signal: bool = False
+    dc_voltage: float = None
+    ac_voltage: float = None
+    index: int = None
+    functions: list[ComponentFunction] = None, 
+    source_functions: list[ComponentFunction] = None
 
+    def __post_init__(self):
+        if self.source_functions is None:
+            self.source_functions = []
+        if self.functions is None:
+            self.functions = []
+            
+    @property
+    def in_sparam(self) -> bool:
+        return self.small_signal
+
+    @property
+    def in_dc(self) -> bool:
+        return isinstance(self.dc_voltage, (int, float, SimParam))
+    
+    @property
+    def in_ac(self) -> bool:
+        return isinstance(self.ac_voltage, (int, float, SimParam))
+    
     @property
     def ground_node(self) -> Node:
         return self.ground
+    
     @property
-    def z_source(self) -> Scalar:
+    def z_source(self) -> SimParam:
         return self.source_impedance._impedance
 
+    def print_data(self):
+        print(f'Ground: {self.ground}')
+        print(f'Node: {self.output_node}')
+        print(f'Source Node: {self.source_node}')
+        print(f'Source Impedance: {self.source_impedance}')
+        print(f'DC Voltage: {self.dc_voltage}')
+        print(f'AC Voltage: {self.ac_voltage}')
 
+    
 class Network:
     """ Network class for the Network object.
     This class represents a network of components and nodes. It is used to build and analyze circuits.
@@ -280,24 +402,46 @@ class Network:
     def print_components(self) -> None:
         '''Prints an overview of the components in the Network'''
         for comp in self.components + self.sources:
-            logger.info(comp)
+            comp.print_data()
 
     @property
     def node_names(self) -> list[str]:
         '''A list of strings corresponding to each node.'''
         return [n.name for n in self.nodes]
 
+    @property
+    def dc_sources(self) -> list[Source]:
+        '''Returns a list of sources that are DC sources.'''
+        return [source for source in self.sources if source.in_dc]
+    
+    @property
+    def ac_sources(self) -> list[Source]:
+        '''Returns a list of sources that are AC sources.'''
+        return [source for source in self.sources if source.in_ac]
+    
+    @property
+    def sparam_sources(self) -> list[Source]:
+        '''Returns a list of sources that are S-parameter sources.'''
+        return [source for source in self.sources if source.in_sparam]
+    
     def unlinked_nodes(self) -> list[Node]:
         '''Returns a list of nodes that are not linked to any other nodes.'''
         return [node for node in self.nodes if node._linked is None]
     
-    def _compile_nodes(self) -> None:
-        '''_compile_nodes writes an index number to the node's index field required for matrix lookup.'''
+    def _define_indices(self) -> None:
+        '''_define_indices writes an index number to the node's index field required for matrix lookup.
+        
+        This method is called before running the analysis to ensure that all nodes have an index number.
+        '''
         i = 0
         for node in self.nodes:
             if node._linked is not None:
                 continue
             node.set_index(i)
+            i += 1
+        
+        for source in self.sources:
+            source.index = i
             i += 1
 
     def _new_node_name(self, basename: str = None) -> str:
@@ -351,7 +495,7 @@ class Network:
         # check if nodes are used in terminals
         for source in self.sources:
             node_dict[source.ground_node] = True
-            node_dict[source.node] = True
+            node_dict[source.output_node] = True
             node_dict[source.source_node] = True
         
         for node, used in node_dict.items():
@@ -359,11 +503,54 @@ class Network:
                 logger.error(f"Node {node.name} is not connected to any components.")
                 logger.error("Unconnected nodes will cause the analysis to yield 0 values.")
                 raise ValueError(f"Node {node.name} is not connected to any components.")
-        
-    def run_sparameter_analysis(self, frequencies: np.ndarray) -> Sparameters:
-        logger.warning("run_sparameter_analysis will be deprecated. Use run instead.")
-        return self.run(frequencies)
+
+    def _has_nonlinear_components(self) -> bool:
+        '''Returns True if the network contains any non-linear components.'''
+        return any([component.is_linear for component in self.components])
     
+    def run_dc(self, initial_voltage: float = 0, maxiter: int = 5) -> np.ndarray:
+
+        self._define_indices()
+        self._check_unconnected_nodes()
+
+        if not self._has_nonlinear_components():
+            maxiter = 1
+
+        non_linear_components: list[NonLinearComponent] = [c for c in self.components if not c.is_linear]
+        M = len(self.sources)
+        N = max([node.index for node in self.nodes]) + 1
+
+        Vsol = np.zeros((N, ), dtype=np.complex128) + np.linspace(0, initial_voltage, N)
+        
+        A_compilers = [c._generate_compiler('DC') for c in self.components + self.sources]
+        I_compilers = [c._generate_I_compiler('DC') for c in self.components + self.sources]
+        
+        ntot = M
+        A = np.zeros((M+N, M+N), dtype=np.complex128)
+
+        SolVec = np.zeros((M+N,), dtype=np.complex128)
+
+        for i in range(maxiter):
+
+            for component in non_linear_components:
+                component.v_function(Vsol)
+
+            for compiler in A_compilers:
+                A = compiler(A, Vsol)
+
+            for compiler in I_compilers:
+                SolVec = compiler(SolVec, Vsol)
+
+            Sol = None
+
+            #print(A)
+            #print('Vinput:', SolVec)
+            Vsol = solve_MNA_DC(A, SolVec, N, M) 
+            print('Vout=',Vsol)
+            print('')
+        return Vsol
+        
+        
     def run(self, frequencies: np.ndarray) -> Sparameters:
         """
         Runs an S-parameter analysis using the MNA method for the network at the specified frequencies.
@@ -377,77 +564,44 @@ class Network:
         Sparameters: An Sparameters object containing the S-parameter matrix for the network at the specified frequencies
 
         """
-        self._compile_nodes()
+        self._define_indices()
         self._check_unconnected_nodes()
         
         M = len(self.sources)
         nF = len(frequencies)
         N = max([node.index for node in self.nodes]) + 1
 
-
-        component_compilers = [c._generate_compiler_function() for c in self.components]
+        A_compilers = [c._generate_compiler('SP') for c in self.components + self.sources]
         
         ntot = M * nF
 
-        G = np.zeros((N, N, nF), dtype=np.complex128)
-        B = np.zeros((N, M, nF), dtype=np.complex128)
-        D = np.zeros((M, M, nF), dtype=np.complex128)
         A = np.zeros((M+N, M+N, nF), dtype=np.complex128)
 
-        for compiler in component_compilers:
-            G = compiler(G, frequencies)
-
-        for i, source in enumerate(self.sources):
-            B[source.ground.index,i] = -1.0
-            B[source.source_node.index,i] = 1.0
-        
-        D = np.transpose(B,(1,0,2))
-
-        voltage_source_nodes = [(t.node.index, t.source_node.index, t.ground_node.index) for t in self.sources]
-
-        A[:N,:N,:] = G 
-        A[:N, N:,:] = B
-        A[N:,:N,:] = D
+        for compiler in A_compilers:
+            A = compiler(A, frequencies)
 
         Zs = np.zeros((M,nF), dtype=np.complex128)
-        for it in range(M):
-            Zs[it,:] = self.sources[it].z_source(frequencies)
 
+        voltage_source_nodes = []
+        for isource, source in enumerate(self.sources):
+            if not source.in_sparam:
+                continue
+            voltage_source_nodes.append((isource, source.output_node.index, source.source_node.index, source.ground_node.index))
+            Zs[isource,:] = source.z_source(frequencies)
 
         indices = np.array(voltage_source_nodes).astype(np.int32)
         frequencies = np.array(frequencies).astype(np.float32)
         Sol = None
 
         if self.suppress_loadbar:
-            V, Sol = solve_MNA_RF_nopgb(A, Zs, indices, frequencies)
+            V, Sol = solve_MNA_RF_nopgb(A, Zs, indices, frequencies, N, M)
         else:
             with nbp.ProgressBar(total=ntot) as progress:
-                V, Sol = solve_MNA_RF(A, Zs, indices, frequencies, progress) 
+                V, Sol = solve_MNA_RF(A, Zs, indices, frequencies, N, M, progress) 
         
         return Sparameters(Sol, frequencies)
 
-    def current_source(self, node_from: Node, node_to: Node, current: float | Scalar) -> Component:
-        """
-        Adds a current source between two nodes in the circuit.
-
-        Parameters:
-        -----------
-        node_from (Node): The node from which the current source originates.
-        node_to (Node): The node to which the current source is connected.
-        current (float): The current value of the current source in Amperes.
-
-        """
-        functionlist = []
-        current = parse_numeric(current)
-        functionlist.append(ComponentFunction([node_from], current.negative()))
-        functionlist.append(ComponentFunction([node_to], current))
-        current_source_obj = Component(
-            [node_from, node_to], functionlist, component_value=current
-        ).set_metadata(**Components.CURRENTSOURCE)
-        self.sources.append(current_source_obj)
-        return current_source_obj
-
-    def terminal(self, signal_node: Node, Z0: float | Scalar, gnd_node: Node = None) -> Source:
+    def terminal(self, signal_node: Node, Z0: float | SimParam, gnd_node: Node = None) -> Source:
         """ Adds a terminal to the network and returns the created terminal object.
         Parameters:
         -----------
@@ -465,13 +619,43 @@ class Network:
             gnd_node = self.gnd
         
         source_node = self.named_node('IntermediatePortNode')
-        Z0 = parse_numeric(Z0)
+        Z0 = enforce_simparam(Z0, unit='Ω')
         impedance_component = self.impedance(source_node, signal_node, Z0, display_value=Z0).set_metadata(**Components.RESISTOR)
-        terminal_object = Source(gnd_node, signal_node, source_node, impedance_component)
+        
+        
+        terminal_object = Source(gnd_node,source_node,output_node=signal_node,
+                                 source_impedance=impedance_component, 
+                                 small_signal=True)
+        
+        Bcf = ComponentFunction([[gnd_node, source_node],[terminal_object]], lambda f: _stack(np.array([[-1],[1]]),f))
+        Ccf = ComponentFunction([[terminal_object],[gnd_node, source_node]], lambda f: _stack(np.array([[1,-1]]),f))
+        
+        terminal_object.functions = [Bcf, Ccf]
+        terminal_object.source_functions = []    
         self.sources.append(terminal_object)
         self.ports[len(self.sources)] = terminal_object
         return terminal_object
 
+    def DC_source(self, node: Node, voltage: float | SimParam, gnd: Node = None) -> Source:
+        
+        if gnd is None:
+            gnd = self.gnd
+        
+        voltage = enforce_simparam(voltage, unit='V')
+
+        terminal_object = Source(ground=gnd,
+                                 source_node=node, dc_voltage=voltage)
+        
+        Bcf = ComponentFunction([[gnd, node],[terminal_object]], lambda f: _stack(np.array([[-1],[1]]),f))
+        Ccf = ComponentFunction([[terminal_object],[gnd, node]], lambda f: _stack(np.array([[-1, 1]]),f))
+        Dcf = ComponentFunction([[terminal_object],[terminal_object]], lambda f: _stack(np.array([[0]]),f))
+        Icf = ComponentFunction([[terminal_object]], lambda f: _stack(np.array([voltage.value]),f))
+
+        terminal_object.functions = [Bcf, Ccf, Dcf]
+        terminal_object.source_functions = [Icf]
+        self.sources.append(terminal_object)
+        return terminal_object
+    
     def new_port(self, impedance: float) -> Node:
         '''Returns a tuple containing a Node and Terminal object.
         The Node object is generated with a name corresponding to the number.
@@ -507,18 +691,18 @@ class Network:
         
         functionlist = []
         
-        admittance_simvalue = parse_numeric(Y)
+        admittance_simvalue = enforce_simparam(Y, unit='S')
 
         if display_value is None:
             display_value = admittance_simvalue
             logger.debug(f'Defaulting display value to {display_value}')
 
-        functionlist.append(ComponentFunction([node1, node1], admittance_simvalue))
-        functionlist.append(ComponentFunction([node1, node2], admittance_simvalue.negative()))
-        functionlist.append(ComponentFunction([node2, node1], admittance_simvalue.negative()))
-        functionlist.append(ComponentFunction([node2, node2], admittance_simvalue))
-
-        admittance_component = Component([node1, node2], functionlist, component_value=display_value).set_metadata(**Components.ADMITTANCE)
+        
+        def _G_stencil(f: np.ndarray) -> np.ndarray:
+            return admittance_simvalue(f) * _stack(_TWO_MAT, f)
+        
+        functionlist = [ComponentFunction([[node1, node2],[node1, node2]], _G_stencil),]
+        admittance_component = Component([node1, node2], functions=functionlist, component_value=display_value).set_metadata(**Components.ADMITTANCE)
         admittance_component._impedance = admittance_simvalue.inverse()
         self.components.append(admittance_component)
         return admittance_component
@@ -542,17 +726,17 @@ class Network:
         """
         functionlist = []
         
-        impedance = parse_numeric(Z)
-        admittance = parse_numeric(Z, inverse=True)
+        impedance = enforce_simparam(Z, unit='Ω')
         
         if display_value is None:
             display_value = impedance(1)
             logger.debug(f'Defaulting display value to {display_value}')
         
-        functionlist.append(ComponentFunction([node1, node1], admittance))
-        functionlist.append(ComponentFunction([node1, node2], admittance.negative()))
-        functionlist.append(ComponentFunction([node2, node1], admittance.negative()))
-        functionlist.append(ComponentFunction([node2, node2], admittance))
+        def _G_stencil(f: float) -> np.ndarray:
+            return (1/impedance(f)) * _stack(_TWO_MAT, f)
+        
+        functionlist = [ComponentFunction([[node1, node2],[node1, node2]], _G_stencil),]
+
         impedance_object = Component([node1, node2], functionlist, component_value=display_value).set_metadata(**Components.IMPEDANCE)
         impedance_object._impedance = impedance
         self.components.append(impedance_object)
@@ -591,12 +775,12 @@ class Network:
         Component: The created capacitor component object.
 
         """
-        C = parse_numeric(C)
+        C = enforce_simparam(C, unit='F')
         
-        def admittance_f(f):
-            return 1j * twopi * f * C(f)
+        def _Y_function(f):
+            return 1j * TWOPI * f * C(f)
         
-        admittance = Function(admittance_f)
+        admittance = Function(_Y_function)
         
         return self.admittance(node1, node2, admittance, display_value=C).set_metadata(**Components.CAPACITOR)
         
@@ -611,12 +795,12 @@ class Network:
         Returns:
             Component: The created inductor component.
         """
-        L = parse_numeric(L)
+        L = enforce_simparam(L, unit='H')
         
-        def admittance_f(f):
-            return 1/(1j * twopi * f * L(f))
+        def admittance_f(f) -> np.ndarray:
+            return 1/(1j * TWOPI * f * L(f))
         
-        admittance = Function(admittance_f)
+        admittance = Function(admittance_f, inf=1e9)
         
         return self.admittance(node1, node2, admittance, display_value=L).set_metadata(**Components.INDUCTOR)
     
@@ -642,113 +826,19 @@ class Network:
         """
         functionlist = []
         c0 = 299792458
-        func_er = parse_numeric(er)
-        func_Z0 = parse_numeric(Z0)
-        func_L = parse_numeric(L)
+        func_er = enforce_simparam(er)
+        func_Z0 = enforce_simparam(Z0, unit='Ω')
+        func_L = enforce_simparam(L, unit='m')
 
-    
-        functionlist.append(
-            ComponentFunction(
-                [gnd, gnd],
-                Function(lambda f: 1 / (func_Z0(f) * np.tanh(1j * func_L(f) * 2 * pi * f * np.sqrt(func_er(f)) / c0))
-                - 1 / (func_Z0(f) * np.sinh(1j * func_L(f) * 2 * pi * f * np.sqrt(func_er(f)) / c0)))
-                ,
-            )
-        )
-        functionlist.append(
-            ComponentFunction(
-                [gnd, port1],
-                Function(lambda f: -(
-                    1 / (func_Z0(f) * np.tanh(1j * func_L(f) * 2 * pi * f * np.sqrt(func_er(f)) / c0))
-                    - 1 / (func_Z0(f) * np.sinh(1j * func_L(f) * 2 * pi * f * np.sqrt(func_er(f)) / c0))
-                )),
-            )
-        )
-        functionlist.append(
-            ComponentFunction(
-                [port1, gnd],
-                Function(lambda f: -(
-                    1 / (func_Z0(f) * np.tanh(1j * func_L(f) * 2 * pi * f * np.sqrt(func_er(f)) / c0))
-                    - 1 / (func_Z0(f) * np.sinh(1j * func_L(f) * 2 * pi * f * np.sqrt(func_er(f)) / c0))
-                )),
-            )
-        )
-        functionlist.append(
-            ComponentFunction(
-                [port1, port1],
-                Function(lambda f: 1 / (func_Z0(f) * np.tanh(1j * func_L(f) * 2 * pi * f * np.sqrt(func_er(f)) / c0))
-                - 1 / (func_Z0(f) * np.sinh(1j * func_L(f) * 2 * pi * f * np.sqrt(func_er(f)) / c0))),
-            )
-        )
+        def beta(f):
+            return TWOPI * f / c0 * np.sqrt(func_er(f))
+        
+        return self.TL(port1, port2, Function(beta), func_L, func_Z0)
 
-        functionlist.append(
-            ComponentFunction(
-                [port1, port1],
-                Function(lambda f: 1 / (func_Z0(f) * np.sinh(1j * func_L(f) * 2 * pi * f * np.sqrt(func_er(f)) / c0))),
-            )
-        )
-        functionlist.append(
-            ComponentFunction(
-                [port1, port2],
-                Function(lambda f: -1 / (func_Z0(f) * np.sinh(1j * func_L(f) * 2 * pi * f * np.sqrt(func_er(f)) / c0))),
-            )
-        )
-        functionlist.append(
-            ComponentFunction(
-                [port2, port1],
-                Function(lambda f: -1 / (func_Z0(f) * np.sinh(1j * func_L(f) * 2 * pi * f * np.sqrt(func_er(f)) / c0))),
-            )
-        )
-        functionlist.append(
-            ComponentFunction(
-                [port2, port2],
-                Function(lambda f: 1 / (func_Z0(f) * np.sinh(1j * func_L(f) * 2 * pi * f * np.sqrt(func_er(f)) / c0))),
-            )
-        )
-
-        functionlist.append(
-            ComponentFunction(
-                [gnd, gnd],
-                Function(lambda f: 1 / (func_Z0(f) * np.tanh(1j * func_L(f) * 2 * pi * f * np.sqrt(func_er(f)) / c0))
-                - 1 / (func_Z0(f) * np.sinh(1j * func_L(f) * 2 * pi * f * np.sqrt(func_er(f)) / c0))),
-            )
-        )
-        functionlist.append(
-            ComponentFunction(
-                [gnd, port2],
-                Function(lambda f: -(
-                    1 / (func_Z0(f) * np.tanh(1j * func_L(f) * 2 * pi * f * np.sqrt(func_er(f)) / c0))
-                    - 1 / (func_Z0(f) * np.sinh(1j * func_L(f) * 2 * pi * f * np.sqrt(func_er(f)) / c0))
-                )),
-            )
-        )
-        functionlist.append(
-            ComponentFunction(
-                [port2, gnd],
-                Function(lambda f: -(
-                    1 / (func_Z0(f) * np.tanh(1j * func_L(f) * 2 * pi * f * np.sqrt(func_er(f)) / c0))
-                    - 1 / (func_Z0(f) * np.sinh(1j * func_L(f) * 2 * pi * f * np.sqrt(func_er(f)) / c0))
-                )),
-            )
-        )
-        functionlist.append(
-            ComponentFunction(
-                [port2, port2],
-                Function(lambda f: 1 / (func_Z0(f) * np.tanh(1j * func_L(f) * 2 * pi * f * np.sqrt(func_er(f)) / c0))
-                - 1 / (func_Z0(f) * np.sinh(1j * func_L(f) * 2 * pi * f * np.sqrt(func_er(f)) / c0))),
-            )
-        )
-
-        transmissionline_component = Component(
-            [gnd, port1, port2], functionlist, component_value=Z0
-        ).set_metadata(**Components.TRANSMISSIONLINE)
-        self.components.append(transmissionline_component)
-        return transmissionline_component
-
-    def TL(self, node1: Node, node2: Node, beta: float | Scalar, length: float | Scalar, Z0: float | Scalar) -> Component:
-        beta = parse_numeric(beta)
-        length = parse_numeric(length)
-        Z0 = parse_numeric(Z0)
+    def TL(self, node1: Node, node2: Node, beta: float | SimParam, length: float | SimParam, Z0: float | SimParam) -> Component:
+        beta = enforce_simparam(beta, unit='rad/m')
+        length = enforce_simparam(length, unit='m')
+        Z0 = enforce_simparam(Z0, unit='Ω')
 
         def a11(f):
             return np.cosh(1j*beta(f)*length(f))
@@ -812,7 +902,7 @@ class Network:
                 Y2[N,i,:] = -np.sum(Y[:,i,:],axis=0)
                 Y2[N,N,:] += np.sum(Y[i,:,:],axis=0)
             return Y2
-        component = Component(nodes + [gnd, ],[ComponentFunction(nodes + [gnd, ],Function(comp_function),True),], Z0 ).set_metadata(value=Z0, **Components.NPORT)
+        component = Component(nodes + [gnd, ],[ComponentFunction(comp_function),], Z0).set_metadata(value=Z0, **Components.NPORT)
         self.components.append(component)
         return component
 
@@ -847,7 +937,7 @@ class Network:
 
         def comp_function(f: float):
             nF = f.shape[0]
-            Y = np.array([[sp(f) for sp in row] for row in Yparams], dtype=np.complex128)
+            Y = np.array([[y(f) for y in row] for row in Yparams], dtype=np.complex128)
             Y2 = np.zeros((N+1,N+1,nF),dtype=np.complex128)
             Y2[:N,:N,:] = Y
             for i in range(N):
@@ -855,11 +945,9 @@ class Network:
                 Y2[N,i,:] = -np.sum(Y[:,i,:],axis=0)
                 Y2[N,N,:] += np.sum(Y[i,:,:],axis=0)
             return Y2
-        component = Component(nodes + [gnd, ],[ComponentFunction(nodes + [gnd, ],Function(comp_function),True),], Z0 ).set_metadata(value=Z0, **Components.NPORT)
+        component = Component(nodes + [gnd, ], functions=[ComponentFunction([nodes, nodes], comp_function)], component_value=Z0).set_metadata(value=Z0, **Components.NPORT)
         self.components.append(component)
         return component
-    
-    
 
     # An old implementation of the transmission line function that is not used and not convenient.
     
