@@ -99,7 +99,7 @@ Most of the methods mentioned below are defined as `Network` methods.
 - **`transmissionline(gnd: Node, port1: Node, port2: Node, Z0: float, er: float, L: float) -> Component`**
   Adds a transmission line with specified properties.
 
-- **`run_sparameter_analysis(frequencies: np.ndarray) -> Sparameters`**
+- **`run(frequencies: np.ndarray) -> Sparameters`**
   Runs S-parameter analysis for the specified frequency range.
 ---
 
@@ -146,7 +146,7 @@ All possible S-parameters up to a 5-port network are predefined as properties fo
 #### **Key Methods**
 Most of the methods mentioned below are defined as `Network` methods.
 
-- **`S(i: int, j: int) -> np.ndarrayu`**
+- **`S(i: int, j: int) -> np.ndarray`**
   Returns the Sij component of the S-matrix.
 
 ---
