@@ -9,9 +9,9 @@ license = {text = "MIT Lisence"}
 readme = "README.md"
 requires-python = ">=3.10,<4.0"
 dependencies = [
-    "numba (>=0.61.0,<0.62.0)",
-    "numpy (<2.2)",
-    "matplotlib (<=3.9)",
+    "numba >=0.61.0",
+    "numpy>=1.24",
+    "matplotlib<=3.10",
     "loguru (>=0.7.3,<0.8.0)",
     "sympy (>=1.13.3,<2.0.0)",
     "numba-progress>=1.1.0",
@@ -19,12 +19,23 @@ dependencies = [
     "schemdraw>=0.19",
 ]
 
-[project.optional-dependencies]
-build = ["setuptools", "cython"]
-compile = ["cchardet"]
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
 
 [tool.uv]
 no-build-isolation-package = ["cchardet"]
+
+[project.urls]
+Homepage = "https://github.com/FennisRobert/heavi"
+Issues = "https://github.com/FennisRobert/heavi/issues"
+
+
+[[tool.uv.index]]
+name = "pypi"
+url = "https://pypi.org/simple/"
+publish-url = "https://upload.pypi.org/legacy/"
+
 
 [[tool.uv.index]]
 name = "testpypi"
