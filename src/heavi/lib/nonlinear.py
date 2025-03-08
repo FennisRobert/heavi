@@ -1,8 +1,6 @@
 import numpy as np
-import scipy.interpolate
 from typing import Callable
-from src.heavi.rfcircuit import NonLinearComponent
-from ..rfcircuit import Network, _stack, _TWO_MAT, ComponentFunction, Component
+from ..rfcircuit import _stack, _TWO_MAT, ComponentFunction, NonLinearComponent
 from .libgen import BaseComponent
 from scipy.optimize import fsolve
 

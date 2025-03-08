@@ -517,19 +517,30 @@ class Network:
             maxiter = 1
 
         non_linear_components: list[NonLinearComponent] = [c for c in self.components if not c.is_linear]
+        linear_components: list[LinearComponent] = [c for c in self.components if c.is_linear]
+        source_components: list[Source] = [s for s in self.sources]
+
         M = len(self.sources)
         N = max([node.index for node in self.nodes]) + 1
 
         Vsol = np.zeros((N, ), dtype=np.complex128) + np.linspace(0, initial_voltage, N)
-        
+        Vsol2 = np.zeros((N + M, ), dtype=np.complex128)
+        Vsol2[:N] = np.linspace(0, initial_voltage, N)
+
         A_compilers = [c._generate_compiler('DC') for c in self.components + self.sources]
         I_compilers = [c._generate_I_compiler('DC') for c in self.components + self.sources]
-        
-        ntot = M
+
+        Jnl_compilers = [c._generate_compiler('DC') for c in non_linear_components]
+        Jl_compilers = [c._generate_compiler('DC') for c in linear_components]
+        source_compilers = [c._generate_compiler('DC') for c in source_components]
+
         A = np.zeros((M+N, M+N), dtype=np.complex128)
 
-        SolVec = np.zeros((M+N,), dtype=np.complex128)
+        Jnl = np.zeros((M+N, M+N), dtype=np.complex128)
+        Jl = np.zeros((M+N, M+N), dtype=np.complex128)
 
+        SolVec = np.zeros((M+N,), dtype=np.complex128)
+        SolVec2 = np.zeros((M+N,), dtype=np.complex128)
         for i in range(maxiter):
 
             for component in non_linear_components:
@@ -538,16 +549,35 @@ class Network:
             for compiler in A_compilers:
                 A = compiler(A, Vsol)
 
+            
             for compiler in I_compilers:
                 SolVec = compiler(SolVec, Vsol)
+                
 
-            Sol = None
-
-            #print(A)
-            #print('Vinput:', SolVec)
+            ## Method One
             Vsol = solve_MNA_DC(A, SolVec, N, M) 
-            print('Vout=',Vsol)
+            print('Vout=',Vsol.real)
             print('')
+            ## Method Two
+
+            for component in non_linear_components:
+                component.v_function(Vsol2[:N])
+
+            for compiler in Jnl_compilers:
+                Jnl = compiler(Jnl, Vsol2[:N])
+
+            for compiler in Jl_compilers + source_compilers + Jnl_compilers:
+                Jl = compiler(Jl, Vsol2[:N])
+            
+            for compiler in I_compilers:
+                SolVec2 = compiler(SolVec2, Vsol2[:N])
+
+            
+            Vsol2[1:] = np.linalg.pinv(Jl[1:,1:]) @ (SolVec2[1:] - Jnl[1:,1:] @ Vsol2[1:])
+
+            print('Vou 2 =',Vsol2.real)
+
+            input('')
         return Vsol
         
         

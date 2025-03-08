@@ -1213,22 +1213,6 @@
         "documentation": {}
     },
     {
-        "label": "NonLinearComponent",
-        "importPath": "src.heavi.rfcircuit",
-        "description": "src.heavi.rfcircuit",
-        "isExtraImport": true,
-        "detail": "src.heavi.rfcircuit",
-        "documentation": {}
-    },
-    {
-        "label": "NonLinearComponent",
-        "importPath": "src.heavi.rfcircuit",
-        "description": "src.heavi.rfcircuit",
-        "isExtraImport": true,
-        "detail": "src.heavi.rfcircuit",
-        "documentation": {}
-    },
-    {
         "label": "SpiceLibrary",
         "importPath": "heavi.lib.spice",
         "description": "heavi.lib.spice",
@@ -1294,12 +1278,19 @@
         "documentation": {}
     },
     {
-        "label": "scipy.interpolate",
-        "kind": 6,
+        "label": "BaseTwoPort",
+        "importPath": "heavi.lib.libgen",
+        "description": "heavi.lib.libgen",
         "isExtraImport": true,
-        "importPath": "scipy.interpolate",
-        "description": "scipy.interpolate",
-        "detail": "scipy.interpolate",
+        "detail": "heavi.lib.libgen",
+        "documentation": {}
+    },
+    {
+        "label": "Node",
+        "importPath": "heavi.rfcircuit",
+        "description": "heavi.rfcircuit",
+        "isExtraImport": true,
+        "detail": "heavi.rfcircuit",
         "documentation": {}
     },
     {
@@ -1324,22 +1315,6 @@
         "description": "scipy.interpolate",
         "isExtraImport": true,
         "detail": "scipy.interpolate",
-        "documentation": {}
-    },
-    {
-        "label": "BaseTwoPort",
-        "importPath": "heavi.lib.libgen",
-        "description": "heavi.lib.libgen",
-        "isExtraImport": true,
-        "detail": "heavi.lib.libgen",
-        "documentation": {}
-    },
-    {
-        "label": "Node",
-        "importPath": "heavi.rfcircuit",
-        "description": "heavi.rfcircuit",
-        "isExtraImport": true,
-        "detail": "heavi.rfcircuit",
         "documentation": {}
     },
     {
@@ -3442,7 +3417,7 @@
         "kind": 5,
         "importPath": "dev_scripts.diode_test",
         "description": "dev_scripts.diode_test",
-        "peekOfCode": "M = hv.Model()\nn1 = M.node()\nn2 = M.node()\ndc1 = M.DC_source(n1, 1.0)\nR = M.resistor(n1, n2, 200)\nD = nl.Diode(Rs = 0.001, I0=1.216e-12, N=1)\nD.connect(n2, M.gnd)\nV = M.run_dc(initial_voltage=0.3, maxiter=20)[-1]\nprint(V)\nprint(f'Output Voltage: {solve_eq(vdiode, vleft)}')",
+        "peekOfCode": "M = hv.Model()\nn1 = M.node()\nn2 = M.node()\ndc1 = M.DC_source(n1, 1.0)\nR = M.resistor(n1, n2, 200)\nD = nl.Diode(Rs = 0.001, I0=1.216e-12, N=1)\nD.connect(n2, M.gnd)\nV = M.run_dc(initial_voltage=1, maxiter=20)[-1]\nprint(V)\nprint(f'Output Voltage: {solve_eq(vdiode, vleft)}')",
         "detail": "dev_scripts.diode_test",
         "documentation": {}
     },
@@ -3451,7 +3426,7 @@
         "kind": 5,
         "importPath": "dev_scripts.diode_test",
         "description": "dev_scripts.diode_test",
-        "peekOfCode": "n1 = M.node()\nn2 = M.node()\ndc1 = M.DC_source(n1, 1.0)\nR = M.resistor(n1, n2, 200)\nD = nl.Diode(Rs = 0.001, I0=1.216e-12, N=1)\nD.connect(n2, M.gnd)\nV = M.run_dc(initial_voltage=0.3, maxiter=20)[-1]\nprint(V)\nprint(f'Output Voltage: {solve_eq(vdiode, vleft)}')",
+        "peekOfCode": "n1 = M.node()\nn2 = M.node()\ndc1 = M.DC_source(n1, 1.0)\nR = M.resistor(n1, n2, 200)\nD = nl.Diode(Rs = 0.001, I0=1.216e-12, N=1)\nD.connect(n2, M.gnd)\nV = M.run_dc(initial_voltage=1, maxiter=20)[-1]\nprint(V)\nprint(f'Output Voltage: {solve_eq(vdiode, vleft)}')",
         "detail": "dev_scripts.diode_test",
         "documentation": {}
     },
@@ -3460,7 +3435,7 @@
         "kind": 5,
         "importPath": "dev_scripts.diode_test",
         "description": "dev_scripts.diode_test",
-        "peekOfCode": "n2 = M.node()\ndc1 = M.DC_source(n1, 1.0)\nR = M.resistor(n1, n2, 200)\nD = nl.Diode(Rs = 0.001, I0=1.216e-12, N=1)\nD.connect(n2, M.gnd)\nV = M.run_dc(initial_voltage=0.3, maxiter=20)[-1]\nprint(V)\nprint(f'Output Voltage: {solve_eq(vdiode, vleft)}')",
+        "peekOfCode": "n2 = M.node()\ndc1 = M.DC_source(n1, 1.0)\nR = M.resistor(n1, n2, 200)\nD = nl.Diode(Rs = 0.001, I0=1.216e-12, N=1)\nD.connect(n2, M.gnd)\nV = M.run_dc(initial_voltage=1, maxiter=20)[-1]\nprint(V)\nprint(f'Output Voltage: {solve_eq(vdiode, vleft)}')",
         "detail": "dev_scripts.diode_test",
         "documentation": {}
     },
@@ -3469,7 +3444,7 @@
         "kind": 5,
         "importPath": "dev_scripts.diode_test",
         "description": "dev_scripts.diode_test",
-        "peekOfCode": "dc1 = M.DC_source(n1, 1.0)\nR = M.resistor(n1, n2, 200)\nD = nl.Diode(Rs = 0.001, I0=1.216e-12, N=1)\nD.connect(n2, M.gnd)\nV = M.run_dc(initial_voltage=0.3, maxiter=20)[-1]\nprint(V)\nprint(f'Output Voltage: {solve_eq(vdiode, vleft)}')",
+        "peekOfCode": "dc1 = M.DC_source(n1, 1.0)\nR = M.resistor(n1, n2, 200)\nD = nl.Diode(Rs = 0.001, I0=1.216e-12, N=1)\nD.connect(n2, M.gnd)\nV = M.run_dc(initial_voltage=1, maxiter=20)[-1]\nprint(V)\nprint(f'Output Voltage: {solve_eq(vdiode, vleft)}')",
         "detail": "dev_scripts.diode_test",
         "documentation": {}
     },
@@ -3478,7 +3453,7 @@
         "kind": 5,
         "importPath": "dev_scripts.diode_test",
         "description": "dev_scripts.diode_test",
-        "peekOfCode": "R = M.resistor(n1, n2, 200)\nD = nl.Diode(Rs = 0.001, I0=1.216e-12, N=1)\nD.connect(n2, M.gnd)\nV = M.run_dc(initial_voltage=0.3, maxiter=20)[-1]\nprint(V)\nprint(f'Output Voltage: {solve_eq(vdiode, vleft)}')",
+        "peekOfCode": "R = M.resistor(n1, n2, 200)\nD = nl.Diode(Rs = 0.001, I0=1.216e-12, N=1)\nD.connect(n2, M.gnd)\nV = M.run_dc(initial_voltage=1, maxiter=20)[-1]\nprint(V)\nprint(f'Output Voltage: {solve_eq(vdiode, vleft)}')",
         "detail": "dev_scripts.diode_test",
         "documentation": {}
     },
@@ -3487,7 +3462,7 @@
         "kind": 5,
         "importPath": "dev_scripts.diode_test",
         "description": "dev_scripts.diode_test",
-        "peekOfCode": "D = nl.Diode(Rs = 0.001, I0=1.216e-12, N=1)\nD.connect(n2, M.gnd)\nV = M.run_dc(initial_voltage=0.3, maxiter=20)[-1]\nprint(V)\nprint(f'Output Voltage: {solve_eq(vdiode, vleft)}')",
+        "peekOfCode": "D = nl.Diode(Rs = 0.001, I0=1.216e-12, N=1)\nD.connect(n2, M.gnd)\nV = M.run_dc(initial_voltage=1, maxiter=20)[-1]\nprint(V)\nprint(f'Output Voltage: {solve_eq(vdiode, vleft)}')",
         "detail": "dev_scripts.diode_test",
         "documentation": {}
     },
@@ -3496,7 +3471,7 @@
         "kind": 5,
         "importPath": "dev_scripts.diode_test",
         "description": "dev_scripts.diode_test",
-        "peekOfCode": "V = M.run_dc(initial_voltage=0.3, maxiter=20)[-1]\nprint(V)\nprint(f'Output Voltage: {solve_eq(vdiode, vleft)}')",
+        "peekOfCode": "V = M.run_dc(initial_voltage=1, maxiter=20)[-1]\nprint(V)\nprint(f'Output Voltage: {solve_eq(vdiode, vleft)}')",
         "detail": "dev_scripts.diode_test",
         "documentation": {}
     },
