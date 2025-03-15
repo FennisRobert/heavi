@@ -2,7 +2,7 @@ from setuptools import setup, find_packages
 
 setup(
     name='heavi',
-    version='0.5.1',
+    version='0.6.0',
     description='A simple python based linear circuit simulator.',
     author="Robert Fennis",
     packages=find_packages(where='src', include=["heavi", "heavi.*"]),
