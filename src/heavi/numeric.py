@@ -1,3 +1,20 @@
+########################################################################################
+##
+##    Numerical Features
+##    This module contains classes used to represent numerical values that may change
+##    value in various conditions.
+##
+##    Author: Robert Fennis
+##    Date: 2025
+##
+########################################################################################
+
+#          __   __   __  ___  __  
+# |  |\/| |__) /  \ |__)  |  /__` 
+# |  |  | |    \__/ |  \  |  .__/ 
+# -------------------------------------------
+
+
 from __future__ import annotations
 import numpy as np
 from typing import Callable, Generator
@@ -6,11 +23,10 @@ from .sparam import NDSparameters
 import inspect
 from functools import wraps
 
-def _num_args(func):
-    sig = inspect.signature(func)
-    params = sig.parameters
-    return len(params)
-
+#  __   __        __  ___           ___  __  
+# /  ` /  \ |\ | /__`  |   /\  |\ |  |  /__` 
+# \__, \__/ | \| .__/  |  /~~\ | \|  |  .__/ 
+# -------------------------------------------
 
 
 TEN_POWERS = {
@@ -25,16 +41,41 @@ TEN_POWERS = {
     12: "P",
 }
 
+#  __   __             ___         ___       __   ___     ___            __  ___    __        __  
+# /  ` /  \ |\ | \  / |__  |\ | | |__  |\ | /  ` |__     |__  |  | |\ | /  `  |  | /  \ |\ | /__` 
+# \__, \__/ | \|  \/  |___ | \| | |___ | \| \__, |___    |    \__/ | \| \__,  |  | \__/ | \| .__/ 
+# -------------------------------------------
 
-def _get_power(number: float):
-    tp = np.log10(np.abs(number))
-    v = np.floor(tp / 3) * 3
-    v = min(12, max(-12, v))
-    v2 = number / (10**v)
-    return v2, v
+
+def _get_power(number: float) -> tuple[float, int]:
+    """Returns the base and exponent in scientific notation.
+
+    Args:
+        number (float): The number to convert.
+
+    Returns:
+        tuple[float, int]: The base and exponent.
+    """    
+    ten_power = np.log10(np.abs(number))
+    n_thousands = np.floor(ten_power / 3) * 3
+    n_thousands = min(12, max(-12, n_thousands))
+    base_number = number / (10**n_thousands)
+    return base_number, n_thousands
 
 def format_value_units(value: float, unit: str) -> str:
-    """ Formats a value with units for display. """
+    """Formats a value with units in scientific notation.
+
+    Args:
+        value (float): The value to format.
+        unit (str): The unit of the value.
+
+    Returns:
+        str: The formatted value.
+
+    Example:
+    >>> format_value_units(1e-9, "A")
+    "1.00 nA"
+    """    
     
     v, p = _get_power(value)
     return f"{v:.2f} {TEN_POWERS[p]}{unit}"
@@ -61,6 +102,9 @@ class Uninitialized:
     
 
 class SimParam:
+    """A class to represent a simulation parameter.
+
+    """    
     _eval_f = 1e9
 
     def __init__(self, unit=''):
@@ -204,7 +248,8 @@ class Random(SimParam):
     
     def inverse(self) -> SimParam:
         return Inverse(self)
-    
+
+            
 class Param(SimParam):
     """ A class to represent a parameter that is swept over a range of values.
 
@@ -260,9 +305,10 @@ class Param(SimParam):
     
     def inverse(self) -> SimParam:
         return Inverse(self)
-    
-class ParameterSweep:
 
+
+class ParameterSweep:
+    """A class to represent a parameter sweep."""
     def __init__(self):
         self.sweep_dimensions: list[tuple[Param]] = []
         self.index_series: list[tuple[int]] = []

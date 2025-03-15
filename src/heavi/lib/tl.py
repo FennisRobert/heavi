@@ -1,10 +1,10 @@
-from .libgen import BaseComponent, BaseTwoPort, BaseFourPort, BaseThreePort
+from .libgen import SubCircuit, TwoNodeSubCircuit, FourNodeSubCircuit, ThreeNodeSubCircuit
 from ..numeric import SimParam, enforce_simparam
-from ..rfcircuit import Node
+from ..network import Node
 import numpy as np
 from ..filtering import impedance_transformer_cheb
 
-class Wilkinson(BaseThreePort):
+class Wilkinson(ThreeNodeSubCircuit):
 
     def __init__(self, Z0: float | SimParam, fc: float | SimParam, er: float | SimParam = 1):
         super().__init__()
@@ -24,7 +24,7 @@ class Wilkinson(BaseThreePort):
         self.network.TL(self.node(1), self.node(3), beta, L, Z0)
         self.network.resistor(self.node(2), self.node(3), Z0*2)
 
-class BranchlineCoupler(BaseFourPort):
+class BranchlineCoupler(FourNodeSubCircuit):
 
     def __init__(self, Z0: float | SimParam, fc: float | SimParam, er: float | SimParam = 1):
         super().__init__()
@@ -44,7 +44,7 @@ class BranchlineCoupler(BaseFourPort):
         self.network.TL(self.node(1), self.node(4), beta, L, self.Z0)
         self.network.TL(self.node(3), self.node(3), beta, L, self.Z0)
 
-class RatraceCoupler(BaseFourPort):
+class RatraceCoupler(FourNodeSubCircuit):
 
     def __init__(self, Z0: float | SimParam, fc: float | SimParam, er: float | SimParam = 1):
         super().__init__()
@@ -86,7 +86,7 @@ class RatraceCoupler(BaseFourPort):
     def p2(self) -> Node:
         return self.node(3)
     
-class Transformer(BaseTwoPort):
+class Transformer(TwoNodeSubCircuit):
 
     def __init__(self, 
                  Z1: float | SimParam,

@@ -1,15 +1,36 @@
+########################################################################################
+##
+##    Spice-Component import modules
+##    This module is used to import SPICE subcircuits and generate Python classes for them.
+##
+##    Author: Robert Fennis
+##    Date: 2025
+##
+########################################################################################
+
+
+#          __   __   __  ___  __  
+# |  |\/| |__) /  \ |__)  |  /__` 
+# |  |  | |    \__/ |  \  |  .__/ 
+# -------------------------------------------
+
+
 from __future__ import annotations
 
 from pathlib import Path
-from .libgen import BaseTwoPort
-from ..rfcircuit import Node
+from .libgen import TwoNodeSubCircuit
+from ..network import Node
 import re
 from dataclasses import dataclass
 from typing import List, Optional
 
 from loguru import logger
 
-####### Constants #######
+#  __   __        __  ___           ___  __  
+# /  ` /  \ |\ | /__`  |   /\  |\ |  |  /__` 
+# \__, \__/ | \| .__/  |  /~~\ | \|  |  .__/ 
+# -------------------------------------------
+
 
 _POWERS = {
         "f": -15,
@@ -47,7 +68,11 @@ from heavi.rfcircuit import Node
 
 '''
 
-# Define basic component classes.
+#  __             __   __   ___  __  
+# /  ` |     /\  /__` /__` |__  /__` 
+# \__, |___ /~~\ .__/ .__/ |___ .__/ 
+# -------------------------------------------
+
 
 class SpaceCompContainer:
     _implemented: bool = False
@@ -80,7 +105,7 @@ class SpiceX(SpaceCompContainer):
 class SpiceD(SpaceCompContainer):
     _implemented: bool = False
 
-class Subcircuit:
+class SpiceSubCircuit:
 
     def __init__(self, name: str, nodes: List[int], components: List[SpaceCompContainer]):
         self.name = name
@@ -176,8 +201,6 @@ def merge_continuation_lines(file_path: str) -> List[str]:
     return merged_lines
 
 
-
-
 def parse_token(string: str, numdict: dict) -> float:
     ''' Parses a string with a number and a power of 10. '''
     if string[0] == "{" and string[-1] == "}":
@@ -195,7 +218,7 @@ def parse_token(string: str, numdict: dict) -> float:
             number *= 10 ** power
         return number
 
-def parse_subckt_line(line: str) -> Subcircuit:
+def parse_subckt_line(line: str) -> SpiceSubCircuit:
     # Remove excess spaces and normalize whitespace
     line = re.sub(r"\s+", " ", line.strip()).upper()
 
@@ -218,7 +241,7 @@ def parse_subckt_line(line: str) -> Subcircuit:
 
     return name, nodes, params
 
-def parse_spice_lib(file_path: str) -> List[Subcircuit]:
+def parse_spice_lib(file_path: str) -> List[SpiceSubCircuit]:
     """
     Parses a SPICE .lib file (with or without continuation lines)
     and returns a list of Subcircuit objects ONLY if the subcircuit contains
@@ -234,7 +257,7 @@ def parse_spice_lib(file_path: str) -> List[Subcircuit]:
     """
     allowed_types = {"R", "L", "C", "V", "I"}
     merged_lines = merge_continuation_lines(file_path)
-    subcircuits: List[Subcircuit] = []
+    subcircuits: List[SpiceSubCircuit] = []
     current_subckt: Optional[str] = None
     current_nodes: List[str] = []
     current_components: List[SpiceComponent] = []
@@ -254,7 +277,7 @@ def parse_spice_lib(file_path: str) -> List[Subcircuit]:
             valid_subckt = True  # start with a valid subcircuit assumption
         elif lower_line.startswith(".ends"):
             if current_subckt is not None and valid_subckt:
-                subcircuit_obj = Subcircuit(name=current_subckt,
+                subcircuit_obj = SpiceSubCircuit(name=current_subckt,
                                              nodes=current_nodes,
                                              components=current_components)
                 subcircuits.append(subcircuit_obj)
@@ -319,9 +342,9 @@ def parse_spice_lib(file_path: str) -> List[Subcircuit]:
                 current_components.append(comp_obj)
     return subcircuits
 
-class SpiceComponent(BaseTwoPort):
+class SpiceComponent(TwoNodeSubCircuit):
 
-    def __init__(self, subcircuit: Subcircuit):
+    def __init__(self, subcircuit: SpiceSubCircuit):
         super().__init__()
         self.subcircuit = subcircuit
 
@@ -360,8 +383,8 @@ class SpiceLibrary:
 
     def __init__(self, filepath: str):
         self.filepath = filepath
-        self.subcircuits: list[Subcircuit] = parse_spice_lib(filepath)
-        self.circuit_dict: dict[str, Subcircuit] = {subckt.name.lower(): subckt for subckt in self.subcircuits}
+        self.subcircuits: list[SpiceSubCircuit] = parse_spice_lib(filepath)
+        self.circuit_dict: dict[str, SpiceSubCircuit] = {subckt.name.lower(): subckt for subckt in self.subcircuits}
     
     def merge(self, other: SpiceLibrary) -> SpiceLibrary:
         ''' Merge another SpiceLibrary objects into the current one. '''
@@ -375,8 +398,7 @@ class SpiceLibrary:
             return None
         return SpiceComponent(sbk)
     
-    def find(self, name: str) -> Optional[Subcircuit]:
-        results = []
+    def find(self, name: str) -> Optional[SpiceSubCircuit]:
         name = name.lower()
 
         if name in self.circuit_dict:
@@ -387,10 +409,16 @@ class SpiceLibrary:
 
 
 def import_spice_library_directory(directory: str, libfilename: str = None) -> None:
-    ''' This function searches all .lib files in the provided directory to build one big SpiceLibrary object.
+    """Imports a directory with .lib and .asy files and generates a Python file with the components.
+    This function searches all .lib files in the provided directory to build one big SpiceLibrary object.
     Then it searches foor all spice .asy files to generate a set of components. 
-    Based on this it generates a Python file with the components and the SpiceLibrary object. '''
-    
+    Based on this it generates a Python file with the components and the SpiceLibrary object.
+
+    Args:
+        directory (str): The directory to search for .lib and .asy files.
+        libfilename (str, optional): The output directory name. Defaults to None.
+    """    
+
     lib_files = Path(directory).rglob("*.lib")
     asy_files = Path(directory).rglob("*.asy")
 

@@ -1,7 +1,31 @@
+########################################################################################
+##
+##    Default plotting functions for the Heavi package
+##    This file contains the default plotting functions for the Heavi package.
+##
+##    Author: Robert Fennis
+##    Date: 2025
+##
+########################################################################################
+
+
+#          __   __   __  ___  __  
+# |  |\/| |__) /  \ |__)  |  /__` 
+# |  |  | |    \__/ |  \  |  .__/ 
+# -------------------------------------------
+
+
 import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.ticker as tck
 from matplotlib import pyplot as plt
+
+
+#  __   ___  ___                ___  __      __   ___ ___ ___         __   __  
+# |  \ |__  |__   /\  |  | |     |  /__`    /__` |__   |   |  | |\ | / _` /__` 
+# |__/ |___ |    /~~\ \__/ |___  |  .__/    .__/ |___  |   |  | | \| \__> .__/ 
+# -------------------------------------------
+
 _colors = plt.rcParams['axes.prop_cycle'].by_key()['color']
 
 ggplot_styles = {
@@ -25,7 +49,23 @@ ggplot_styles = {
 }
 plt.rcParams.update(ggplot_styles)
 
+#  ___            __  ___    __        __  
+# |__  |  | |\ | /  `  |  | /  \ |\ | /__` 
+# |    \__/ | \| \__,  |  | \__/ | \| .__/ 
+# -------------------------------------------
+
+
 def _gen_grid(xs: tuple, ys: tuple, N = 201) -> list[np.ndarray]:
+    """Generate a grid of lines for the Smith Chart
+
+    Args:
+        xs (tuple): Tuple containing the x-axis values
+        ys (tuple): Tuple containing the y-axis values
+        N (int, optional): Number Used. Defaults to 201.
+
+    Returns:
+        list[np.ndarray]: List of lines
+    """    
     xgrid = np.arange(xs[0], xs[1]+xs[2], xs[2])
     ygrid = np.arange(ys[0], ys[1]+ys[2], ys[2])
     xsmooth = np.logspace(np.log10(xs[0]+1e-8), np.log10(xs[1]), N)
@@ -42,6 +82,15 @@ def _gen_grid(xs: tuple, ys: tuple, N = 201) -> list[np.ndarray]:
     return lines
 
 def _generate_grids(orders = (0, 0.5, 1, 2, 5, 10, 50,1e5), N=201) -> list[tuple[np.ndarray, np.ndarray]]:
+    """Generate the grid for the Smith Chart
+
+    Args:
+        orders (tuple, optional): Locations for Smithchart Lines. Defaults to (0, 0.5, 1, 2, 5, 10, 50,1e5).
+        N (int, optional): N distrectization points. Defaults to 201.
+
+    Returns:
+        list[tuple[np.ndarray, np.ndarray]]: List of axes lines
+    """    
     lines = []
     xgrids = orders
     for o1, o2 in zip(xgrids[:-1], xgrids[1:]):
@@ -50,6 +99,14 @@ def _generate_grids(orders = (0, 0.5, 1, 2, 5, 10, 50,1e5), N=201) -> list[tuple
     return lines
 
 def _smith_transform(lines: list[tuple[np.ndarray, np.ndarray]]) -> list[tuple[np.ndarray, np.ndarray]]:
+    """Executes the Smith Transform on a list of lines
+
+    Args:
+        lines (list[tuple[np.ndarray, np.ndarray]]): List of lines
+
+    Returns:
+        list[tuple[np.ndarray, np.ndarray]]: List of transformed lines
+    """    
     new_lines = []
     for line in lines:
         x, y = line
@@ -60,8 +117,17 @@ def _smith_transform(lines: list[tuple[np.ndarray, np.ndarray]]) -> list[tuple[n
         new_lines.append((new_x, new_y))
     return new_lines
 
-def hintersections(x, y, level):
+def hintersections(x: np.ndarray, y: np.ndarray, level: float) -> list[float]:
+    """Find the intersections of a line with a level
 
+    Args:
+        x (np.ndarray): X-axis values
+        y (np.ndarray): Y-axis values
+        level (float): Level to intersect
+
+    Returns:
+        list[float]: List of x-values where the intersection occurs
+    """      
     y1 = y[:-1] - level
     y2 = y[1:] - level
     ycross = y1 * y2
@@ -95,7 +161,13 @@ def plot(x: np.ndarray, y: np.ndarray) -> None:
     plt.show()
 
 
-def smith(f, S):
+def smith(f: np.ndarray, S: np.ndarray) -> None:
+    """ Plot the Smith Chart
+
+    Args:
+        f (np.ndarray): Frequency vector (Not used yet)
+        S (np.ndarray): S-parameters to plot
+    """     
     if not isinstance(S, list):
         Ss = [S]
     else:
@@ -125,49 +197,39 @@ def smith(f, S):
 
 
 
-def plot_s_parameters(f, S, dblim=[-80, 5], 
-               xunit="GHz", 
-               levelindicator: int | float =None, 
-               noise_floor=-150, 
-               fill_areas: list[tuple]= None, 
-               spec_area: list[tuple[float]] = None,
-               unwrap_phase=False, 
-               logx: bool = False,
-               labels: list[str] = None,
-               linestyles: list[str] = None,
-               colorcycle: list[int] = None,
-               filename: str = None,
-               show_plot: bool = True):
-    
-    """Plot S-parameters in a rectangular plot.
-    
-    Parameters
-    ----------
-    f : np.ndarray
-        Frequency vector
-    S : np.ndarray
-        S-parameters to plot
-    dblim : list, optional
-        Magnitude plot limits, by default [-80, 5]
-    xunit : str, optional
-        Frequency unit, by default "GHz"
-    levelindicator : int, optional
-        Level indicator, by default None
-    noise_floor : int, optional
-        Noise floor, by default -150
-    fill_areas : list, optional
-        Areas to fill, by default None
-    unwrap_phase : bool, optional
-        Unwrap phase, by default False
-    logx : bool, optional
-        Logarithmic x-axis, by default False
-    labels : list, optional
-        Labels for the plot, by default None
-    linestyles : list, optional
-        Linestyles for the plot, by default None
-    colorcycle : list, optional
-        Color cycle for the plot, by default None
-    """
+def plot_s_parameters(f: np.ndarray, S: list[np.ndarray] | np.ndarray, 
+                      dblim=[-80, 5], 
+                    xunit="GHz", 
+                    levelindicator: int | float =None, 
+                    noise_floor=-150, 
+                    fill_areas: list[tuple]= None, 
+                    spec_area: list[tuple[float]] = None,
+                    unwrap_phase=False, 
+                    logx: bool = False,
+                    labels: list[str] = None,
+                    linestyles: list[str] = None,
+                    colorcycle: list[int] = None,
+                    filename: str = None,
+                    show_plot: bool = True) -> None:
+    """Plot S-parameters in dB and phase
+
+    Args:
+        f (np.ndarray): Frequency vector
+        S (list[np.ndarray] | np.ndarray): S-parameters to plot (list or single array)
+        dblim (list, optional): Decibel y-axis limit. Defaults to [-80, 5].
+        xunit (str, optional): Frequency unit. Defaults to "GHz".
+        levelindicator (int | float, optional): Level at which annotation arrows will be added. Defaults to None.
+        noise_floor (int, optional): Artificial random noise floor level. Defaults to -150.
+        fill_areas (list[tuple], optional): Regions to fill (fmin, fmax). Defaults to None.
+        spec_area (list[tuple[float]], optional): _description_. Defaults to None.
+        unwrap_phase (bool, optional): If or not to unwrap the phase data. Defaults to False.
+        logx (bool, optional): Whether to use logarithmic frequency axes. Defaults to False.
+        labels (list[str], optional): A lists of labels to use. Defaults to None.
+        linestyles (list[str], optional): The linestyle to use (list or single string). Defaults to None.
+        colorcycle (list[int], optional): A list of colors to use. Defaults to None.
+        filename (str, optional): The filename (will automatically save). Defaults to None.
+        show_plot (bool, optional): If or not to show the resulting plot. Defaults to True.
+    """    
     if not isinstance(S, list):
         Ss = [S]
     else:

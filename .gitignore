@@ -184,3 +184,7 @@ touchstone_tests/
 *.s4p
 
 dev_scripts/
+.vscode/
+
+tests/
+tests/*

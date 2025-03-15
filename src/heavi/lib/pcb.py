@@ -1,13 +1,40 @@
 
+#  ___      __   ___  __           ___      ___           
+# |__  \_/ |__) |__  |__) |  |\/| |__  |\ |  |   /\  |    
+# |___ / \ |    |___ |  \ |  |  | |___ | \|  |  /~~\ |___ 
+# -------------------------------------------
+
+########################################################################################
+##
+##    PCB Layouting automization features
+##    This PCB layouting library is still under development and is not yet fully functional.
+##
+##    Author: Robert Fennis
+##    Date: 2025
+##
+########################################################################################
+
+#          __   __   __  ___  __  
+# |  |\/| |__) /  \ |__)  |  /__` 
+# |  |  | |    \__/ |  \  |  .__/ 
+# -------------------------------------------
+
 from __future__ import annotations
 import numpy as np
 from enum import Enum
-from .libgen import BaseComponent
-from ..rfcircuit import Network, Node
+from .libgen import SubCircuit
+from ..network import Network, Node
 from scipy.optimize import root_scalar
 from loguru import logger
 
+#  __   __             ___         ___       __   ___     ___            __  ___    __        __  
+# /  ` /  \ |\ | \  / |__  |\ | | |__  |\ | /  ` |__     |__  |  | |\ | /  `  |  | /  \ |\ | /__` 
+# \__, \__/ | \|  \/  |___ | \| | |___ | \| \__, |___    |    \__/ | \| \__,  |  | \__/ | \| .__/ 
+# -------------------------------------------
+
+
 u0 = 4*np.pi*1e-7
+
 def coth(x):
     return -np.tan(x + np.pi/2)
 
@@ -84,7 +111,7 @@ def _microstrip_wz0(height: float, er: float, Z0: float = None, width: float = N
         Z0 = _microstrip_z0(width, height, er)
     return width, Z0
 
-class MicrostripLine(BaseComponent):
+class MicrostripLine(SubCircuit):
 
     def __init__(self, width: float, length: float, height: float, epsilon_r: float, tand: float, trace_thickenss: float = 60e-6, gnd: Node = None):
         super().__init__()
@@ -103,7 +130,7 @@ class MicrostripLine(BaseComponent):
             self.gnd = self.network.gnd
         self.network.transmissionline(self.gnd, self.node(1), self.node(2),  self.Z0, self.ereff*(1-1j*self.tand), self.length)
 
-class Stripline(BaseComponent):
+class Stripline(SubCircuit):
 
     def __init__(self, width: float, length: float, height: float, epsilon_r: float, tand: float, trace_thickenss: float = 60e-6, gnd: Node = None):
         super().__init__()
@@ -248,7 +275,7 @@ class NodeForwarder:
             self.pcb.network.inductor(self.node, node, L)
             return self
         
-    def component(self, comp: BaseComponent) -> NodeForwarder | MultiNodeForwarder:
+    def component(self, comp: SubCircuit) -> NodeForwarder | MultiNodeForwarder:
         """ Connect a component to the network. """
         new_nodes = [self.pcb.network.node() for _ in range(comp.n_nodes - 1)]
         comp.connect(self.node, *new_nodes)

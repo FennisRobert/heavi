@@ -1,12 +1,42 @@
-from .rfcircuit import Network, Node
+########################################################################################
+##
+##    The model module contains the Model and QuickModel classes.
+##    An extended version of the Network class, the Model class is used to create
+##
+##    Author: Robert Fennis
+##    Date: 2025
+##
+########################################################################################
+
+#          __   __   __  ___  __  
+# |  |\/| |__) /  \ |__)  |  /__` 
+# |  |  | |    \__/ |  \  |  .__/ 
+# -------------------------------------------
+
+
+from .network import Network, Node
 from .filtering import FilterType, BandType, CauerType, Filtering
+
+#  __             __   __      __   ___  ___          ___    __        __  
+# /  ` |     /\  /__` /__`    |  \ |__  |__  | |\ | |  |  | /  \ |\ | /__` 
+# \__, |___ /~~\ .__/ .__/    |__/ |___ |    | | \| |  |  | \__/ | \| .__/ 
+# -------------------------------------------
 
 
 class Model(Network):
-
+    """The Model class is an extension of the Network class. It can be used instead of the Network
+    class and offers additional functionality for creating circuits.
+    """    
     def __init__(self, default_name: str = "Node", 
                  filter_library: Filtering = Filtering, 
                  suppress_loadbar: bool = False):
+        """Initializes the Model object.
+
+        Args:
+            default_name (str, optional): Default node name prefix. Defaults to "Node".
+            filter_library (Filtering, optional): The filter library to use. Defaults to Filtering.
+            suppress_loadbar (bool, optional): Whether or not to show numba loadbars. Defaults to False.
+        """        
         super().__init__(default_name, suppress_loadbar=suppress_loadbar)
         self.filters: Filtering = filter_library(self)
         self.numbered_nodes: dict[int, Node] = dict()
@@ -17,27 +47,5 @@ class Model(Network):
         node = self.numbered_nodes[index]
         node._parent = self
         return node
-
-class QuickModel(Network):
-
-    def __init__(self, default_name: str = "Node", 
-                 filter_library: Filtering = Filtering, 
-                 suppress_loadbar: bool = False):
-        super().__init__(default_name, suppress_loadbar=suppress_loadbar)
-        self.filters: Filtering = filter_library(self)
-
-    def LC(self, n1: Node, n2: Node, L: float, C: float) -> None:
-        self.capacitor(n1, n2, C)
-        self.inductor(n1, n2, L)
     
-    def LC_series(self, n1: Node, n2: Node, L: float, C: float) -> None:
-        nmid = self.node()
-        self.capacitor(n1, nmid, C)
-        self.inductor(nmid, n2, L)
-
-    def C(self, n1: Node, n2: Node, C: float) -> None:
-        self.capacitor(n1, n2, C)
-    
-    def L(self, n1: Node, n2: Node, L: float) -> None:
-        self.inductor(n1, n2, L)
     

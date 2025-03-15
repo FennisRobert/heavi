@@ -1,6 +1,6 @@
 [project]
 name = "heavi"
-version = "0.5.0"
+version = "0.5.1"
 description = "An RF circuit simulator"
 authors = [
     {name = "Robert Fennis"}
@@ -17,6 +17,7 @@ dependencies = [
     "numba-progress>=1.1.0",
     "scipy>=1.15.1",
     "schemdraw>=0.19",
+    "pyescher>=0.2.1",
 ]
 
 [build-system]

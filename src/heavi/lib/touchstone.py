@@ -1,11 +1,33 @@
+########################################################################################
+##
+##    A Touchstone file parser for Heavi
+##    A touchstone file importer for S-parameter data.
+##
+##    Author: Robert Fennis
+##    Date: 2025
+##
+########################################################################################
+
+#          __   __   __  ___  __  
+# |  |\/| |__) /  \ |__)  |  /__` 
+# |  |  | |    \__/ |  \  |  .__/ 
+# -------------------------------------------
+
+
 from __future__ import annotations
-from .libgen import BaseComponent
+from .libgen import SubCircuit
 import numpy as np
 from scipy.interpolate import interp1d
 from pathlib import Path
 from typing import Callable
 import re
 from loguru import logger
+
+#  __   __        __  ___           ___  __  
+# /  ` /  \ |\ | /__`  |   /\  |\ |  |  /__` 
+# \__, \__/ | \| .__/  |  /~~\ | \|  |  .__/ 
+# -------------------------------------------
+
 
 _FUNIT = {
     'hz': 1,
@@ -21,13 +43,48 @@ _NPORTS = {
     '.snp': None
 }
 
+
+
+#  __   __             ___         ___       __   ___     ___            __  ___    __        __  
+# /  ` /  \ |\ | \  / |__  |\ | | |__  |\ | /  ` |__     |__  |  | |\ | /  `  |  | /  \ |\ | /__` 
+# \__, \__/ | \|  \/  |___ | \| | |___ | \| \__, |___    |    \__/ | \| \__,  |  | \__/ | \| .__/ 
+# -------------------------------------------
+
+
 def _ma_ri(mag: float, angle: float) -> complex:
+    """Converts magnitude and angle to complex number.
+
+    Args:
+        mag (float): The magnitude of the complex number.
+        angle (float): The angle of the complex number.
+
+    Returns:
+        complex: The complex number.
+    """    
     return mag * np.exp(1j * np.radians(angle))
 
 def _db_ri(db: float, angle: float) -> complex:
+    """Converts dB and angle to complex number.
+
+    Args:
+        db (float): The magnitude in dB.
+        angle (float): The angle in degrees.
+
+    Returns:
+        complex: The complex number.
+    """    
     return 10**(db/20) * np.exp(1j * np.radians(angle))
 
 def _ri_ri(real: float, imag: float) -> complex:
+    """Converts real and imaginary parts to complex number.
+
+    Args:
+        real (float): The real part of the complex number.
+        imag (float): The imaginary part of the complex number.
+
+    Returns:
+        complex: The complex number.
+    """    
     return real + 1j * imag
 
 _DATAMAP = {
@@ -36,8 +93,33 @@ _DATAMAP = {
     'ri': _ri_ri
 }
 
-class FileBasedNPort(BaseComponent):
+#  __             __   __   ___  __  
+# /  ` |     /\  /__` /__` |__  /__` 
+# \__, |___ /~~\ .__/ .__/ |___ .__/ 
+# -------------------------------------------
 
+
+class FileBasedNPort(SubCircuit):
+    """A touchstone file importer for S-parameter data."
+
+    The FileBasedNPort class is a subclass of the SubCircuit class and is intended to be used
+    to import S-parameter data from touchstone files. The class is intended to be used in Heavi
+    simulations and can be used to import S-parameter data from touchstone files.
+
+    Args:
+        filename (str): The filename of the touchstone file.
+        n_ports (int, optional): The number of ports. Defaults to None.
+        ignore_extension (bool, optional): Ignore the file extension. Defaults to False.
+        interp_type (str, optional): The interpolation type. Defaults to 'cubic'.
+
+    Example:
+        ```python
+        touchstone = FileBasedNPort('touchstone.s2p')
+        touchstone.renormalize(75)
+        touchstone.connect(n1, n2)
+        ```
+
+    """
     def __init__(self, filename: str,
                  n_ports: int = None,
                  ignore_extension: bool = False,
@@ -149,6 +231,14 @@ class FileBasedNPort(BaseComponent):
             self.Sdata[i,:,:] = Smat
 
     def renormalize(self, new_impedance: float) -> FileBasedNPort:
+        """ Renormalize the touchstone file to a new impedance.
+
+        Args:
+            new_impedance (float): The new impedance to normalize the touchstone file to.
+
+        Returns:
+            FileBasedNPort: The renormalized touchstone file subcircuit.
+        """        
         Zold = self.refimp
         Znew = new_impedance
         A = np.eye(self.n_ports, self.n_ports) * np.sqrt(Znew/Zold)*(1/(Znew+Zold))
@@ -171,3 +261,4 @@ class FileBasedNPort(BaseComponent):
 
         self.network.n_port_S(self.network.gnd, 
                               [self.nodes[i] for i in range(1,self.n_ports+1)],s_functions,self.refimp)
+        

@@ -1,9 +1,31 @@
-from .rfcircuit import Network, Node
+########################################################################################
+##
+##    Filtering Functions
+##    This module contains functions to design filters and impedance transformers.
+##
+##    Author: Robert Fennis
+##    Date: 2025
+##
+########################################################################################
+
+#          __   __   __  ___  __  
+# |  |\/| |__) /  \ |__)  |  /__` 
+# |  |  | |    \__/ |  \  |  .__/ 
+# -------------------------------------------
+
+from .network import Network, Node
 from enum import Enum
 import sympy as sym
 from sympy.simplify.fu import TR0,TR8
 import numpy as np
 from loguru import logger
+
+
+#  __   __             ___         ___       __   ___     ___            __  ___    __        __  
+# /  ` /  \ |\ | \  / |__  |\ | | |__  |\ | /  ` |__     |__  |  | |\ | /  `  |  | /  \ |\ | /__` 
+# \__, \__/ | \|  \/  |___ | \| | |___ | \| \__, |___    |    \__/ | \| \__,  |  | \__/ | \| .__/ 
+# -------------------------------------------
+
 
 def even(x):
     """ Returns True if x is even, False otherwise. """
@@ -16,6 +38,12 @@ def odd(x):
     if x % 2 == 1:
         return True
     return False
+
+#  __             __   __   ___  __  
+# /  ` |     /\  /__` /__` |__  /__` 
+# \__, |___ /~~\ .__/ .__/ |___ .__/ 
+# -------------------------------------------
+
 
 class FilterType(Enum):
     """Filter type enumeration.

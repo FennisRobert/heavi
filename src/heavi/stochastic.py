@@ -1,5 +1,27 @@
+########################################################################################
+##
+##    Stochastic Analysis of S-parameters
+##    
+##
+##    Author: Robert Fennis
+##    Date: 2025
+##
+########################################################################################
+
+#          __   __   __  ___  __  
+# |  |\/| |__) /  \ |__)  |  /__` 
+# |  |  | |    \__/ |  \  |  .__/ 
+# -------------------------------------------
+
+
 import numpy as np
 import matplotlib.pyplot as plt
+
+#  ___            __  ___    __        __  
+# |__  |  | |\ | /  `  |  | /  \ |\ | /__` 
+# |    \__/ | \| \__,  |  | \__/ | \| .__/ 
+# -------------------------------------------
+
 
 def analyse_sparameter(sparam: list[np.ndarray], sparam_phase: list[np.ndarray], phase_reference: np.ndarray=None, n_bins: int = 51) -> tuple[tuple[float, float], tuple[float, float]]:
     """

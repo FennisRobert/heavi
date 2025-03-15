@@ -1,6 +1,27 @@
-from .libgen import BaseComponent, BaseTwoPort
+########################################################################################
+##
+##    An SMD Subcircuit Library for Heavi
+##    This library was written for an old version of Heavi and needs to be revisited.
+##    Use at own risk. Intended mostly for S-parameter analysis.
+##
+##    Author: Robert Fennis
+##    Date: 2025
+##
+########################################################################################
+
+#          __   __   __  ___  __  
+# |  |\/| |__) /  \ |__)  |  /__` 
+# |  |  | |    \__/ |  \  |  .__/ 
+# -------------------------------------------
+
+
+from .libgen import SubCircuit, TwoNodeSubCircuit
 from enum import Enum
 
+#  ___                  __  
+# |__  |\ | |  |  |\/| /__` 
+# |___ | \| \__/  |  | .__/ 
+# -------------------------------------------
 
 class SMDResistorSize(Enum):
     R0402 = "0402"
@@ -23,7 +44,13 @@ class SMDInductorSize(Enum):
     L1206 = "1206"
     # Add other sizes as needed
 
-class SMDResistor(BaseTwoPort):
+#  __             __   __   ___  __  
+# /  ` |     /\  /__` /__` |__  /__` 
+# \__, |___ /~~\ .__/ .__/ |___ .__/ 
+# -------------------------------------------
+
+
+class SMDResistor(TwoNodeSubCircuit):
     """
     A simple SMD resistor model that accounts for parasitic inductance and capacitance 
     based on package size.
@@ -96,7 +123,7 @@ class SMDResistor(BaseTwoPort):
                       inductance=self.inductance,
                       capacitance=self.capacitance)
 
-class SMDInductor(BaseTwoPort):
+class SMDInductor(TwoNodeSubCircuit):
     """
     An SMD inductor with a simple R-L // C parasitic model.
     
@@ -185,7 +212,7 @@ class SMDInductor(BaseTwoPort):
                       esr=self.esr,
                       parallel_capacitance=self.parallel_capacitance)
 
-class SMDCapacitor(BaseTwoPort):
+class SMDCapacitor(TwoNodeSubCircuit):
     """
     An SMD capacitor with an ESL-ESR-C series model.
     

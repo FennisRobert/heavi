@@ -1,12 +1,50 @@
+########################################################################################
+##
+##    An S-parameter data container class
+##    This module contains classes for handling S-parameter data
+##
+##    Author: Robert Fennis
+##    Date: 2025
+##
+########################################################################################
+
+#          __   __   __  ___  __  
+# |  |\/| |__) /  \ |__)  |  /__` 
+# |  |  | |    \__/ |  \  |  .__/ 
+# -------------------------------------------
+
+
 import numpy as np
 from typing import Callable
 import re
 from scipy.interpolate import interpn, RegularGridInterpolator
 from loguru import logger
 
+
+#  ___            __  ___    __        __  
+# |__  |  | |\ | /  `  |  | /  \ |\ | /__` 
+# |    \__/ | \| \__,  |  | \__/ | \| .__/ 
+# -------------------------------------------
+
+
 def frange(fmin: float, fmax: float, n: int) -> np.ndarray:
-    """Generate n frequencies from fmin to fmax"""
+    """Generates a linearly spaced frequency range
+
+    Args:
+        fmin (float): Lower frequency bound
+        fmax (float): Upper frequency bound
+        n (int): Number of points
+
+    Returns:
+        np.ndarray: Linearly spaced frequency range
+    """    
     return np.linspace(fmin, fmax, n)
+
+
+#  __             __   __   ___  __  
+# /  ` |     /\  /__` /__` |__  /__` 
+# \__, |___ /~~\ .__/ .__/ |___ .__/ 
+# -------------------------------------------
 
 class Sparameters:
 
@@ -18,7 +56,7 @@ class Sparameters:
         ----------
         S : np.ndarray
             Scattering matrix of shape (nports, nports, nfreqs) 
-        s"""
+        """
         self._S: np.ndarray = S
         self.f: float = f
         self.nports: int = S.shape[0]
@@ -156,17 +194,38 @@ class Sparameters:
     def S55(self):
         return self.S(5, 5)
 
-class Interpolator:
 
+class Interpolator:
+    """Wrapper class for scipy RegularGridInterpolator
+    """    
     def __init__(self, interp: RegularGridInterpolator):
         self._interp: RegularGridInterpolator = interp
 
-    def __call__(self, *args):
+    def __call__(self, *args) -> np.ndarray:
+        """Interpolates the data at the given points
+
+        Args:
+            *args: N-dimensional points to interpolate at
+        
+        Returns:
+            np.ndarray: Interpolated data
+        """        
         return np.squeeze(self._interp(np.meshgrid(*args, indexing='ij')))
 
 class NDSparameters(Sparameters):
+    """N-dimensional S-parameter data container class
+    """
 
     def __init__(self, mdim_data: np.ndarray, axes: list[np.ndarray]):
+        """Initializes the N-dimensional S-parameter container
+
+        S-parameter data is expected to be of shape (..., nports, nports, nfreqs)
+
+
+        Args:
+            mdim_data (np.ndarray): _description_
+            axes (list[np.ndarray]): _description_
+        """        
         self._sdata: np.ndarray = mdim_data
         self._axes: list[np.ndarray] = axes
         self._shape: tuple[int] = self._sdata.shape
@@ -195,9 +254,22 @@ class NDSparameters(Sparameters):
         return self.S(i1, i2)
     
     def intS(self, p1: int, p2: int) -> Interpolator:
+        """Interpolates the S-parameter data for the given port combinations"
+
+        Args:
+            p1 (int): Port number
+            p2 (int): Port number
+        
+        Returns:
+            Interpolator: Interpolator object.
+
+        Example:
+        --------
+        >>> S = NDSparameters(data, axes)
+        >>> S.intS(1, 2)(f1, f2)
+        """
         if any([ax.shape[0] > 1 for ax in self._outer_axes]):
             logger.warning('Parallel axis found in outer dimensions. Defaulting to first detected axis')
-        print([ax[0,:].shape for ax in self._outer_axes], self._axes[-1].shape)
         axes = [np.squeeze(ax[0,:]) for ax in self._outer_axes] + [self._axes[-1],]
         return Interpolator(RegularGridInterpolator(axes, self.S(p1, p2), bounds_error=False, fill_value=None))
     

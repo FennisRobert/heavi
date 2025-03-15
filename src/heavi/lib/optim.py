@@ -1,10 +1,32 @@
+########################################################################################
+##
+##    S-parameter optimization features
+##    Features for optimizing S-parameters of a network.
+##
+##    Author: Robert Fennis
+##    Date: 2025
+##
+########################################################################################
+
+#          __   __   __  ___  __  
+# |  |\/| |__) /  \ |__)  |  /__` 
+# |  |  | |    \__/ |  \  |  .__/ 
+# -------------------------------------------
+
+
 from ..numeric import SimParam
-from ..rfcircuit import Network
+from ..network import Network
 from ..sparam import Sparameters
 from typing import Callable
 import numpy as np
 from enum import Enum
 from abc import ABC, abstractmethod
+
+#  __             __   __   ___  __  
+# /  ` |     /\  /__` /__` |__  /__` 
+# \__, |___ /~~\ .__/ .__/ |___ .__/ 
+# -------------------------------------------
+
 
 class OptimVar(SimParam):
     """ Class for defining an optimisation variable. 
@@ -400,14 +422,14 @@ class Optimiser:
             def objective(coeffs):
                 for p,c in zip(self.parameters, coeffs):
                     p.set(c)
-                S = self.network.run(fs)
+                S = self.network.run_sp(fs)
                 Ms = np.array([abs(req.eval(S)) for req in self.requirements])
                 return (np.mean(Ms**pnorm))**(1/pnorm) + differential_weighting*(max(Ms)-min(Ms))**differential_weighting_exponent
         else:
             def objective(coeffs):
                 for p,c in zip(self.parameters, coeffs):
                     p.set(c)
-                S = self.network.run(fs)
+                S = self.network.run_sp(fs)
                 subobj = [abs(req.eval(S))**pnorm for req in self.requirements]
                 return (sum(subobj)/NR)**(1/pnorm)
                
