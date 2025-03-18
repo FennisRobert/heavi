@@ -292,11 +292,11 @@ class Filtering:
             fc = 0.5*(f1+f2)
             A = np.cosh(Nsections*np.arccosh(1/np.cos(np.pi/4*(2-(f2-f1)/(fc)))))
             ripple = 1/(2*A) * np.log(Z02/Z01)
-            logger.info(f'Computed Ripple = {ripple}')
+            logger.debug(f'Computed Ripple = {ripple}')
 
         l0 = 299792458/fc * 0.25 * (1/np.sqrt(er))
         imps = impedance_transformer_cheb(Z01, Z02, ripple, Nsections)[1:-1]
-        nodes = [self.N.named_node('TransformerNode') for i in range(len(imps)-1)]
+        nodes = [self.N.node(index='TransformerNode') for i in range(len(imps)-1)]
 
         nodes = [port1, ] + nodes + [port2,]
 
@@ -351,6 +351,8 @@ class Filtering:
             Whether to apply Chebychev correction, by default False. If turned to true, the cutoff frequency and bandwidth will be corrected to match the ripple.
         
         """
+
+        NODEINDEX = "internalFilterNode"
         cauernodes = [port1]
         Nint = 0
         if cauer_type == CauerType.TYPE2:
@@ -360,7 +362,7 @@ class Filtering:
 
         Nint = int(Nint)
         for i in range(0, Nint):
-            cauernodes.append(self.N.named_node("V_internal_"))
+            cauernodes.append(self.N.node(index=NODEINDEX))
         cauernodes.append(port2)
 
         Capacitors = []
@@ -433,7 +435,7 @@ class Filtering:
                     Capacitors.append(Cp)
                     Inductors.append(Lp)
                 else:
-                    xnode = self.N.named_node("V_series_")
+                    xnode = self.N.node(index=NODEINDEX)
                     Cseries = 1 / (w0_bandpass * gk * Z0 * Qfactor)
                     Lseries = Qfactor * gk * Z0 / w0_bandpass
                     Cser = self.N.capacitor(cauernodes[node1], xnode, Cseries)
@@ -442,7 +444,7 @@ class Filtering:
                     Inductors.append(Lser)
             elif type is BandType.BANDSTOP:
                 if testf(k):
-                    xnode = self.N.named_node("V_series_")
+                    xnode = self.N.node(index=NODEINDEX)
                     Cpar = gk / (Qfactor * w0_bandpass * Z0)
                     Lpar = Qfactor * Z0 / (gk * w0_bandpass)
                     Cp = self.N.capacitor(gnd, xnode, Cpar)

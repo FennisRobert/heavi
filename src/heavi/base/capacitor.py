@@ -6,7 +6,8 @@ from .numeric import stack, cstack
 class Capacitor(BaseComponent):
     supported_simulations: List[SimulationType] = [SimulationType.AC,
                                                    SimulationType.DC, 
-                                                   SimulationType.SP]
+                                                   SimulationType.SP,
+                                                   SimulationType.TRANS]
     
     def __init__(self, node1: Node, node2: Node, capacitance: float):
         super().__init__()

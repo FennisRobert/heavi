@@ -6,8 +6,10 @@ import numpy as np
 class Inductor(BaseComponent):
     supported_simulations: List[SimulationType] = [SimulationType.AC,
                                                    SimulationType.DC, 
-                                                   SimulationType.SP]
+                                                   SimulationType.SP,
+                                                   SimulationType.TRANS]
     
+    TRANS_sources = 1
     def __init__(self, node1: Node, node2: Node, inductance: float):
         super().__init__()
         self.nodes = [node1, node2]

@@ -21,7 +21,7 @@ from dataclasses import dataclass
 from collections import defaultdict
 import numpy as np
 from .solvers import solve_MNA_RF, solve_MNA_RF_nopgb, solve_MNA_DC, solve_MNA_TRAN, solve_MNA_TRAN_nopgb
-from .node import Node
+from .node import Node, NodeAllocator
 from .sparam import Sparameters
 from .numeric import SimParam, enforce_simparam, Function, SimParam, Scalar
 from .base import (MatSource, BaseComponent, SimulationType, Port, Admittance, Resistor, Inductor, 
@@ -74,15 +74,18 @@ class Network:
 
     def __init__(self, default_name: str = 'Node', suppress_loadbar: bool = False):
         self.gnd: Node = Node("gnd", _parent=self, _gnd=True)
-        self.nodes: list[Node] = [self.gnd]
+        
         self.components: list[BaseComponent] = []
         self.sources: list[MatSource] = []
         self.ports: dict[int, Port] = {}
         self.port_counter: int = 1
-        self.node_counter: defaultdict[str, int] = defaultdict(int)
-        self.node_default_name: str = default_name
+        
         self.suppress_loadbar: bool = suppress_loadbar
         self._vramp: float = 0
+
+        self._default_node_index: str = default_name
+        self._nodes: list[Node] = [self.gnd]
+        self._node_library: dict[str, NodeAllocator] = {self._default_node_index: NodeAllocator(self._default_node_index, self)}
         
     def get_vramp(self):
         return self._vramp
@@ -95,11 +98,11 @@ class Network:
     @property
     def node_names(self) -> list[str]:
         '''A list of strings corresponding to each node.'''
-        return [n.name for n in self.nodes]
+        return [n.name for n in self._nodes]
     
     def unlinked_nodes(self) -> list[Node]:
         '''Returns a list of nodes that are not linked to any other nodes.'''
-        return [node for node in self.nodes if node._linked is None]
+        return [node for node in self._nodes if node._linked is None]
     
     def _define_indices(self, simtype: SimulationType) -> None:
         '''_define_indices writes an index number to the node's index field required for matrix lookup.
@@ -107,7 +110,7 @@ class Network:
         This method is called before running the analysis to ensure that all nodes have an index number.
         '''
         i = 0
-        for node in self.nodes:
+        for node in self._nodes:
             if node._linked is not None:
                 continue
             node.set_index(i)
@@ -120,28 +123,13 @@ class Network:
             component.set_sources(sources)
             i += N
 
-    def _new_node_name(self, basename: str = None) -> str:
-        '''Generates a node name label to be used by checking which ones exist and then generating a new one.'''
-        if basename is None:
-            basename = self.node_default_name
-        node_name = f'{basename}{self.node_counter[basename]}'
-        self.node_counter[basename] += 1
-        return node_name
     
     def _assign_internal_nodes(self, simtype: SimulationType) -> None:
         '''Assigns internal nodes to components that require them.'''
         for component in self.components:
             N = component.n_requested_internal_nodes(simtype)
-            nodes = [self.node() for _ in range(N)]
+            nodes = [self.node(index='core_internal') for _ in range(N)]
             component.set_internal_nodes(nodes)
-        
-    def named_node(self, prefix: str) -> Node:
-        """ Adds a named node to the network where the prefix is predetermined. """
-        name = self._new_node_name(prefix)
-        
-        N = Node(name, _parent=self)
-        self.nodes.append(N)
-        return N
     
     def port(self, number: int) -> BaseComponent | None:
         """Returns the port object corresponding to the provided number.
@@ -164,25 +152,26 @@ class Network:
         self.port_counter += 1
         return index
     
-    def node(self, name: str = None) -> Node:
-        """Creates a new node in the network.
+    def node(self, number: int = None, index: str = None) -> Node:
+        """Return the node with the provided number from the provided node index library.
 
         Args:
-            name (str, optional): A desired prefix name for the node. Defaults to None.
+            number (int, optional): The noden umber. Defaults to None.
+            index (str, optional): The index. Defaults to None. (default index)
 
         Returns:
-            Node: The created Node object.
+            Node: The node object
         """        
-        if name is None:
-            name = self._new_node_name()
+        if index is None:
+            index = self._default_node_index
+        if index not in self._node_library:
+            self._node_library[index] = NodeAllocator(index, self)
         
-        if name in self.node_names:
-            logger.warning(f"Node name {name} already exists")
-            name = self._new_node_name(name)
-    
-        N = Node(name, _parent=self)
-        self.nodes.append(N)
-        return N
+        node, is_new = self._node_library[index].request(number)
+        if is_new:
+            self._nodes.append(node)
+        return node
+
 
     def mnodes(self, N: int, name: str = None) -> list[Node]:
         """Creates a list of N nodes in the network.
@@ -202,7 +191,7 @@ class Network:
     def _check_unconnected_nodes(self) -> None:
         '''Checks for unconnected nodes in the network and raises a warning if any are found.'''
         # collecct a list of nodes and included status
-        node_dict = {node.unique(): False for node in self.nodes}
+        node_dict = {node.unique(): False for node in self._nodes}
 
         # check if nodes are used in components
         for component in self.components:
@@ -250,7 +239,7 @@ class Network:
             maxiter = 1
             
         M = len(self.sources)
-        N = max([node.index for node in self.nodes]) + 1
+        N = max([node.index for node in self._nodes]) + 1
 
         Vsol = np.zeros((N, ))
         
@@ -287,7 +276,9 @@ class Network:
 
         return Vsol
     
-    def run_transient(self, duration: float, dt: float, maxiter: int = 5, source_ramp_steps: int = 0,
+    def run_transient(self, duration: float, dt: float, alpha: float = 0.5,
+                      maxiter: int = 5, 
+                      source_ramp_steps: int = 0,
                       voltage_interpolation_steps: int = 51) -> np.ndarray:
         
         logger.warning("Transient Analysis is still under development and will not work for most components.")
@@ -305,7 +296,7 @@ class Network:
         n_timesteps = len(timesteps)
 
         M = len(self.sources)
-        N = max([node.index for node in self.nodes]) + 1
+        N = max([node.index for node in self._nodes]) + 1
 
         Vsol = np.zeros((N, ))
         
@@ -324,6 +315,7 @@ class Network:
         A = np.zeros((M+N, M+N)) 
 
         DiodeData = [(-1,-1,np.linspace(0,1,5),np.linspace(0,1,5)),]
+        LCData = [(-1, -1,-1,-1, 0.0),]
 
         ## GENERATE TIMESERIES
         transient_source_data = [(-1,np.linspace(0,1,5),np.linspace(0,1,5)),]
@@ -332,11 +324,15 @@ class Network:
                 transient_source_data.append((source.index, source.vfun(timesteps), timesteps))
         
         for comp in self.components:
-            if not isinstance(comp, Diode):
-                continue
-            I, V = comp.IVData(Nsteps=voltage_interpolation_steps)
-            DiodeData.append((comp.nodes[0].index, comp.nodes[1].index, I,V))
+            if isinstance(comp, Diode):
+                I, V = comp.IVData(Nsteps=voltage_interpolation_steps)
+                DiodeData.append((comp.nodes[0].index, comp.nodes[1].index, I,V))
+            elif isinstance(comp, Capacitor):
+                LCData.append((0, comp.nodes[0].index, comp.nodes[1].index, -1, comp.C))
+            elif isinstance(comp, Inductor):
+                LCData.append((1, comp.nodes[0].index, comp.nodes[1].index, comp.sources[0].index, comp.L))
 
+        print(LCData)
         for A_compiler in A_compilers:
             A = A_compiler(A)
         
@@ -344,11 +340,11 @@ class Network:
             SolVec = I_compiler(SolVec)
 
         if self.suppress_loadbar:
-            Vsol = solve_MNA_TRAN_nopgb(A, SolVec, N, M, transient_source_data, rampvals, maxiter, DiodeData, 0.00001, 0.00001) 
+            Vsol = solve_MNA_TRAN_nopgb(A, SolVec, N, M, transient_source_data, rampvals, maxiter, DiodeData) 
 
         else:
             with nbp.ProgressBar(total=n_timesteps) as progress:
-                Vsol = solve_MNA_TRAN(A, SolVec, N, M, transient_source_data, rampvals, maxiter, DiodeData, 0.00001, 0.00001, progress) 
+                Vsol = solve_MNA_TRAN(A, SolVec, N, M, transient_source_data, rampvals, maxiter, DiodeData, LCData, alpha, progress) 
 
         
         return timesteps, Vsol
@@ -379,7 +375,7 @@ class Network:
 
         M = len(self.sources)
         nF = len(frequencies)
-        N = max([node.index for node in self.nodes]) + 1
+        N = max([node.index for node in self._nodes]) + 1
         
         # Initialize the S-parameter matrix and voltage source compiler
         A_compilers = [c.SP_matrix_compiler() for c in self._get_components(simtype)]
