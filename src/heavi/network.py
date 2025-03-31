@@ -87,6 +87,8 @@ class Network:
         self._nodes: list[Node] = [self.gnd]
         self._node_library: dict[str, NodeAllocator] = {self._default_node_index: NodeAllocator(self._default_node_index, self)}
         
+        self._initialized: bool = False
+
     def get_vramp(self):
         return self._vramp
     
@@ -109,6 +111,7 @@ class Network:
         
         This method is called before running the analysis to ensure that all nodes have an index number.
         '''
+
         i = 0
         for node in self._nodes:
             if node._linked is not None:
@@ -332,7 +335,6 @@ class Network:
             elif isinstance(comp, Inductor):
                 LCData.append((1, comp.nodes[0].index, comp.nodes[1].index, comp.sources[0].index, comp.L))
 
-        print(LCData)
         for A_compiler in A_compilers:
             A = A_compiler(A)
         
@@ -349,7 +351,7 @@ class Network:
         
         return timesteps, Vsol
         
-    def run_sp(self, frequencies: np.ndarray) -> Sparameters:
+    def run_sp(self, frequencies: np.ndarray, reinitialize: bool = False) -> Sparameters:
         """
         Runs an S-parameter analysis using the MNA method for the network at the specified frequencies.
 
@@ -367,9 +369,11 @@ class Network:
 
         simtype = SimulationType.SP
         
-        self._assign_internal_nodes(simtype)
-        self._define_indices(simtype)
-        self._check_unconnected_nodes()
+        if not self._initialized:
+            self._assign_internal_nodes(simtype)
+            self._define_indices(simtype)
+            self._check_unconnected_nodes()
+            self._initialized = True
 
         # Define the number of sources and nodes
 
@@ -411,6 +415,9 @@ class Network:
             with nbp.ProgressBar(total=total_number_of_computations) as progress:
                 V, Sol = solve_MNA_RF(mna_matrix, impedance_vector, indices, frequencies, N, M, progress) 
         
+        if reinitialize:
+            self._initialized = False
+
         return Sparameters(Sol, frequencies)
     
 
@@ -454,12 +461,13 @@ class Network:
         self.components.append(vfn)
         return vfn
     
-    def new_port(self, Z0: float, gnd: Node = None) -> Port:
+    def new_port(self, Z0: float, node: Node = None, gnd: Node = None) -> Port:
         """Creates a new port plus its own output node in the network.
 
         Args:
             Z0 (float): The characteristic impedance of the port.
-            gnd (Node, optional): The reference gorund node. Defaults to None.
+            node (Node, optional): The node to which the port is connected. Defaults to None.
+            gnd (Node, optional): The reference ground node. Defaults to None.
 
         Returns:
             Port: The created port object.
@@ -468,7 +476,11 @@ class Network:
             gnd = self.gnd
 
         int_node = self.node()
-        src_node = self.node()
+
+        if node is None:
+            src_node = self.node()
+        else:
+            src_node = node
         port = Port(self.get_port_index(), src_node, int_node, gnd, Z0)
         self.components.append(port)
         self.ports[port.index] = port

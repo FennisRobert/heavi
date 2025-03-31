@@ -212,6 +212,84 @@ class Interpolator:
         """        
         return np.squeeze(self._interp(np.meshgrid(*args, indexing='ij')))
 
+class StatSparam:
+
+    def __init__(self, S: np.ndarray):
+        self._S: np.ndarray = S
+        self.ntrials: int = S.shape[0]
+
+    @property
+    def amplitude_mean(self) -> np.ndarray:
+        return np.abs(self._S).mean(axis=0)
+    
+    @property
+    def amplitude_std(self) -> np.ndarray:
+        return np.abs(self._S).std(axis=0)
+    
+    @property
+    def power_mean(self) -> np.ndarray:
+        return (np.abs(self._S)**2.0).mean(axis=0)
+    
+    @property
+    def power_std(self) -> np.ndarray:
+        return (np.abs(self._S)**2.0).std(axis=0)
+    
+    @property
+    def rms_mean(self) -> np.ndarray:
+        return np.sqrt(np.abs(self._S)**2.0).mean(axis=0) 
+    
+    @property
+    def rms_std(self) -> np.ndarray:
+        return np.sqrt(np.abs(self._S)**2.0).std(axis=0)
+
+
+class StatSparameters(Sparameters):
+    """Series of S-parameters over multiple Monte Carlo runs
+    """
+
+    def __init__(self, Ntrials: int):
+        self.Ntrials: int = Ntrials
+        self._Sdata: list[np.ndarray] = []
+
+    @property
+    def nports(self) -> int:
+        if len(self._Sdata) == 0:
+            return 0
+        return self._Sdata[0].shape[0]
+    
+    @property
+    def nfreqs(self) -> int:
+        if len(self._Sdata) == 0:
+            return 0
+        return self._Sdata[0].shape[2]
+    
+    def add(self, S: np.ndarray):
+        """Add S-parameter data to the container
+
+        Args:
+            S (np.ndarray): S-parameter data of shape (nports, nports, nfreqs)
+        """        
+        if S.shape != (self.nports, self.nports, self.nfreqs):
+            raise ValueError(f"Invalid S-parameter shape. Expected {(self.nports, self.nports, self.nfreqs)}, got {S.shape}")
+        self._Sdata.append(S)
+    
+    def S(self, p1: int, p2: int) -> StatSparam:
+        """Get S-parameter S[p1, p2] counting from 1, S(1,1) is S11
+
+        Args:
+            p1 (int): Port number
+            p2 (int): Port number
+        
+        Returns:
+            np.ndarray: S-parameter data
+        """        
+        return StatSparam(np.stack([S[p1-1, p2-1, :] for S in self._Sdata], axis=1))
+    
+    def __call__(self, p1: int, p2: int) -> StatSparam:
+        return self.S(p1, p2)
+    
+    
+
 class NDSparameters(Sparameters):
     """N-dimensional S-parameter data container class
     """

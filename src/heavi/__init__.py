@@ -1,7 +1,7 @@
 from .network import Network
 from .node import Node
 from .graphing import plot_s_parameters, plot, smith
-from .sparam import Sparameters, frange, NDSparameters
+from .sparam import Sparameters, frange, NDSparameters, StatSparam, StatSparameters
 from .model import Model
 from .filtering import FilterType, BandType, CauerType, Filtering
 from .numeric import MonteCarlo, Param, Function, ParameterSweep, set_print_frequency

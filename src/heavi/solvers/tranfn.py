@@ -4,13 +4,10 @@
 # \__/ | \| |__/ |___ |  \    |__/ |___  \/  |___ |___ \__/ |     |  | |___ | \|  |  
 # -------------------------------------------
 
-
-
 from numba import njit, prange, c16, i8, f8, typed, types, typeof, jit
 import numba_progress as nbp
 from numba_progress.progress import ProgressBarType
 import numpy as np
-
 
 #placeholder decorator that instead of compiling with numba prints the type using typeof of the called arguments and then executes the function
 # def njit(*args, **kwargs):
@@ -35,8 +32,6 @@ import numpy as np
 _DIODE_EXAMPLE = [(1,2,np.array([1.,2.,3.]),np.array([1.,2.,3.])), (4,5,np.array([1.,2.,3.]),np.array([1.,2.,3.]))]
 _LC_EXAMPLE = [(0,1,2,0,1e-12), (1,4,5,0,1e-12)]
 _VSIGNALS_EXAMPLE = [(1,np.linspace(0,1,12),np.linspace(0,1,12)), (3,np.linspace(0,1,13),np.linspace(0,1,12))]
-
-
 
 @njit(types.Tuple((f8[:,:],f8[:]))(f8, f8, f8[:], f8[:]), cache=True, fastmath=True)
 def compute_diode(v1, v2, Idata, Vdata):

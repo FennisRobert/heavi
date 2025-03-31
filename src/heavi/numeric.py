@@ -19,7 +19,7 @@ from __future__ import annotations
 import numpy as np
 from typing import Callable, Generator
 from itertools import product
-from .sparam import NDSparameters
+from .sparam import NDSparameters, StatSparameters, StatSparam
 import inspect
 from functools import wraps
 
@@ -446,6 +446,7 @@ class MonteCarlo:
     """A class to represent a Monte Carlo simulation."""
     def __init__(self):
         self._random_numbers: list[Random] = []
+        self.S: StatSparameters = None
 
     def gaussian(self, mean: float, std: float) -> Random:
         """Adds a Gaussian random number to the Monte Carlo simulation.
@@ -488,10 +489,16 @@ class MonteCarlo:
         return random
     
     def iterate(self, N: int) -> Generator[int, None, None]:
+        self.S = StatSparameters(N)
         for i in range(N):
             for random in self._random_numbers:
                 random.initialize()
             yield i
+    
+    def submit_S(self, S: np.ndarray) -> None:
+        """Submits S-parameters to the Monte Carlo simulation."""
+        self.S.add(S)
+
 
 
 def enforce_simparam(value: float | SimParam | Callable, inverse: bool = False, unit: str = '') -> SimParam:
