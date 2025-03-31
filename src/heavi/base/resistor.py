@@ -52,7 +52,7 @@ class Resistor(BaseComponent):
         slc = self.mat_slice
 
         def compiler(matrix: np.ndarray, f: float) -> np.ndarray:
-            matrix[slc] += self.G * _TWO_MAT
+            matrix[slc] += self.G * _TWO_MAT[:,:,np.newaxis]
             return matrix
         
         return compiler
