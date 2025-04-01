@@ -268,7 +268,10 @@ class StatSparameters(Sparameters):
 
         Args:
             S (np.ndarray): S-parameter data of shape (nports, nports, nfreqs)
-        """        
+        """     
+        if not self._Sdata:
+            self._Sdata.append(S)
+            return   
         if S.shape != (self.nports, self.nports, self.nfreqs):
             raise ValueError(f"Invalid S-parameter shape. Expected {(self.nports, self.nports, self.nfreqs)}, got {S.shape}")
         self._Sdata.append(S)
