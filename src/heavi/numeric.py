@@ -237,6 +237,10 @@ class Random(SimParam):
         self._inf = inf
         self.unit = unit
 
+    @property
+    def value(self) -> float:
+        return self._value
+    
     def initialize(self):
         self._value = self._randomizer()
 
@@ -466,6 +470,7 @@ class MonteCarlo:
         random = Random(lambda: np.random.normal(mean, std))
         random._mean = mean
         random._std = std
+        random._value = mean
         self._random_numbers.append(random)
         return random
     
