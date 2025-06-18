@@ -3,7 +3,7 @@ allow-direct-references = true
 
 [project]
 name = "heavi"
-version = "0.7.3"
+version = "0.7.4"
 description = "An RF circuit simulator"
 authors = [
     {name = "Robert Fennis"}
@@ -15,7 +15,7 @@ dependencies = [
     "numba >=0.61.0",
     "numpy>=1.24",
     "matplotlib<=3.10",
-    "loguru (>=0.7.3,<0.8.0)",
+    "loguru (>=0.7.4,<0.8.0)",
     "sympy (>=1.13.3,<2.0.0)",
     "numba-progress>=1.1.0",
     "scipy>=1.15.1",
