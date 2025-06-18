@@ -359,7 +359,7 @@ class ParameterSweep:
         """
         self._param_buffer.append((start,stepsize,None))
 
-    def add(self, N: int) -> tuple[Param]:
+    def add(self, N: int) -> tuple[Param] | Param:
         """Adds a dimension to the parameter sweep.
         
         Parameters:
@@ -379,6 +379,8 @@ class ParameterSweep:
                 params.append(Param.lin(start,start+step*N,N))
         self.add_dimension(*params)
         self._param_buffer = []
+        if len(params) == 1:
+            return params[0]
         return params
     
     def submit(self, S: np.ndarray, fs: np.ndarray) -> ParameterSweep:

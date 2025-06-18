@@ -12,7 +12,7 @@ class TransmissionLine(BaseComponent):
         self.nterminals = 4
         self.Z0: SimParam = enforce_simparam(Z0)
         self.beta: SimParam = enforce_simparam(beta)
-        self.length: float = length
+        self.length: SimParam = enforce_simparam(length)
         self.component_name = 'TransmissionLine'
         self.unit = 'Ohm'
         self.value = self.Z0.value
@@ -27,29 +27,29 @@ class TransmissionLine(BaseComponent):
         length = self.length
         Z0 = self.Z0
         
-        def a11(f):
+        def a11(f, length):
             return np.cosh(1j*beta(f)*length)
-        def a12(f):
+        def a12(f, length):
             return Z0(f)*np.sinh(1j*beta(f)*length)
-        def a21(f):
+        def a21(f, length):
             return 1/Z0(f)*np.sinh(1j*beta(f)*length)
-        def a22(f):
+        def a22(f, length):
             return np.cosh(1j*beta(f)*length)
         
-        def y11(f):
-            return a22(f)/a12(f)
-        def y12(f):
-            return -((a11(f)*a22(f))-(a12(f)*a21(f)))/a12(f)
-        def y21(f):
-            return -1/a12(f)
-        def y22(f):
-            return a11(f)/a12(f)
+        def y11(f, length):
+            return a22(f, length)/a12(f, length)
+        def y12(f, length):
+            return -((a11(f, length)*a22(f, length))-(a12(f, length)*a21(f, length)))/a12(f, length)
+        def y21(f, length):
+            return -1/a12(f, length)
+        def y22(f, length):
+            return a11(f, length)/a12(f, length)
         
         functions = [[y11, y12], [y21, y22]]
         N = 2
         def comp_function(f: float):
             nF = f.shape[0]
-            Y = np.array([[y(f) for y in row] for row in functions], dtype=np.complex128)
+            Y = np.array([[y(f, self.length.value) for y in row] for row in functions], dtype=np.complex128)
             Y2 = np.zeros((N+1,N+1,nF),dtype=np.complex128)
             Y2[:N,:N,:] = Y
             for i in range(2):

@@ -263,12 +263,15 @@ class StatSparameters(Sparameters):
             return 0
         return self._Sdata[0].shape[2]
     
-    def add(self, S: np.ndarray):
+    def add(self, S: np.ndarray | Sparameters):
         """Add S-parameter data to the container
 
         Args:
             S (np.ndarray): S-parameter data of shape (nports, nports, nfreqs)
         """     
+        if isinstance(S, Sparameters):
+            S = S._S
+        
         if not self._Sdata:
             self._Sdata.append(S)
             return   
@@ -286,7 +289,7 @@ class StatSparameters(Sparameters):
         Returns:
             np.ndarray: S-parameter data
         """        
-        return StatSparam(np.stack([S[p1-1, p2-1, :] for S in self._Sdata], axis=1))
+        return StatSparam(np.stack([S[p1-1, p2-1, :] for S in self._Sdata], axis=0))
     
     def __call__(self, p1: int, p2: int) -> StatSparam:
         return self.S(p1, p2)
