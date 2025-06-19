@@ -36,8 +36,8 @@ class Resistor(BaseComponent):
         super().__init__()
         self.nodes = [node1, node2]
         self.nterminals = 2
-        self.G: float = 1/resistance
-        self.R: float = resistance
+        self.G: SimParam = enforce_simparam(lambda f: 1/resistance)
+        self.R: SimParam = enforce_simparam(resistance)
         
         self.component_name = 'Resistor'
         self.unit = 'Ohm'
@@ -52,7 +52,7 @@ class Resistor(BaseComponent):
         slc = self.mat_slice
 
         def compiler(matrix: np.ndarray, f: float) -> np.ndarray:
-            matrix[slc] += self.G * _TWO_MAT[:,:,np.newaxis]
+            matrix[slc] += self.G(f) * _TWO_MAT[:,:,np.newaxis]
             return matrix
         
         return compiler

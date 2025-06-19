@@ -13,7 +13,7 @@ class Capacitor(BaseComponent):
         super().__init__()
         self.nodes = [node1, node2]
         self.nterminals = 2
-        self.C: float = capacitance
+        self.C: SimParam = enforce_simparam(capacitance)
         
         self.component_name = 'Capacitor'
         self.unit = 'F'
@@ -28,7 +28,7 @@ class Capacitor(BaseComponent):
         row,col = self.mat_slice
 
         def compiler(matrix: np.ndarray, f: float) -> np.ndarray:
-            matrix[row,col,:] += cstack(_TWO_MAT_C, 1j*2*np.pi*f*self.C ,0*_TWO_MAT_C)
+            matrix[row,col,:] += cstack(_TWO_MAT_C, 1j*2*np.pi*f*self.C(f) ,0*_TWO_MAT_C)
             return matrix
         
         return compiler

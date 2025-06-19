@@ -189,8 +189,8 @@ class FrequencyLevel(Requirement):
                  fmax: float,
                  nF: int,
                  sparam: tuple[int, int],
-                 upper_limit: float = None,
-                 lower_limit: float = None,
+                 upper_limit: Callable = None,
+                 lower_limit: Callable = None,
                  weight: float = 1,
                  f_norm: float | PNorm = 4):
         self.fs = np.linspace(fmin,fmax,nF)
@@ -198,15 +198,15 @@ class FrequencyLevel(Requirement):
         self.slc: slice = None
         self.weight: float = weight
 
-        self.upper_limit = upper_limit
-        self.lower_limit = lower_limit
+        self.upper_limit: Callable = upper_limit
+        self.lower_limit: Callable = lower_limit
 
         if upper_limit is not None and lower_limit is not None:
-            self.metric = dBbelow(upper_limit, norm=f_norm) + dBabove(lower_limit, norm=f_norm)
+            self.metric = lambda S: upper_limit(S) + lower_limit(S)
         elif upper_limit is not None:
-            self.metric = dBbelow(upper_limit, norm=f_norm)
+            self.metric = upper_limit
         elif lower_limit is not None:
-            self.metric = dBabove(lower_limit, norm=f_norm)
+            self.metric = lower_limit
         else:
             raise ValueError("At least one of upper_limit or lower_limit must be specified")
         
@@ -351,8 +351,8 @@ class Optimiser:
                         fmax: float,
                         nF: int,
                         sparam: tuple[int, int],
-                        upper_limit: float = None,
-                        lower_limit: float = None,
+                        upper_limit: Callable = None,
+                        lower_limit: Callable = None,
                         weight: float = 1,
                         f_norm: float | PNorm = 4):
             """ Add a frequency level requirement to the optimiser.
@@ -369,9 +369,9 @@ class Optimiser:
                 The number of frequencies to use in the requirement.
             sparam : tuple[int, int]
                 The S-parameter to use in the requirement.
-            upper_limit : float, optional
+            upper_limit : Callable, optional
                 The upper limit of the requirement. If not specified, the requirement is unbounded.
-            lower_limit : float, optional
+            lower_limit : Callable, optional
                 The lower limit of the requirement. If not specified, the requirement is unbounded.
             weight : float, optional
                 The weight of the requirement. If not specified, the weight is 1.

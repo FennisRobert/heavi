@@ -14,7 +14,7 @@ class Inductor(BaseComponent):
         super().__init__()
         self.nodes = [node1, node2]
         self.nterminals = 2
-        self.L: float = inductance
+        self.L: SimParam = enforce_simparam(inductance)
         
         self.component_name = 'Inductor'
         self.unit = 'H'
@@ -29,7 +29,7 @@ class Inductor(BaseComponent):
         row,col = self.mat_slice
 
         def compiler(matrix: np.ndarray, f: float) -> np.ndarray:
-            matrix[row,col,:] += cstack(_TWO_MAT, 1/(1j*2*np.pi*f*self.L),0*_TWO_MAT)
+            matrix[row,col,:] += cstack(_TWO_MAT, 1/(1j*2*np.pi*f*self.L(f)),0*_TWO_MAT)
             return matrix
         
         return compiler
