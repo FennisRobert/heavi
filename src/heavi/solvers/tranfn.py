@@ -73,7 +73,7 @@ def implement_inductor(A, x, i1, i2, vi, L, Vold, Iold, dt):
     x[vi] = -L*2*(Iold)/dt - Vold
     return A, x
 
-@jit(f8[:,:](f8[:,:], f8[:], 
+@njit(f8[:,:](f8[:,:], f8[:], 
              i8, 
              i8, 
              typeof(_VSIGNALS_EXAMPLE), 
