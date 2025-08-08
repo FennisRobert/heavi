@@ -24,7 +24,4 @@ post_commit_hooks = []
 filename = "uv.lock"
 
 [[tool.bumpversion.files]]
-filename = "setup.py"
-
-[[tool.bumpversion.files]]
 filename = "pyproject.toml"
