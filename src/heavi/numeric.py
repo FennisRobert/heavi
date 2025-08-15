@@ -130,7 +130,7 @@ class SimParam:
     
     def __repr__(self) -> str:
         """Returns a string representation of the parameter"""
-        return f"SimParam({self._value})"
+        return f"SimParam({self.value})"
     
     def negative(self) -> SimParam:
         """Returns the negative of the parameter"""

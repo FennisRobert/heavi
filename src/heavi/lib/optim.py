@@ -44,9 +44,11 @@ class OptimVar(SimParam):
         is. The function should take a float and return a float.
     """
     def __init__(self, initial_value: float, 
-                 bounds: tuple[float, float] = None, 
-                 mapping: Callable = None,
+                 bounds: tuple[float, float] | None = None, 
+                 mapping: Callable | None = None,
                  unit: str = ''):
+        if not isinstance(mapping, Callable) and mapping is not None:
+            raise TypeError(f'The variable mapping must be a callable function. Use dBbelow or dBabove. Not {type(mapping)}')
         self._value = initial_value
         self.bounds = bounds
         self.mapping: Callable = mapping
@@ -189,8 +191,8 @@ class FrequencyLevel(Requirement):
                  fmax: float,
                  nF: int,
                  sparam: tuple[int, int],
-                 upper_limit: Callable = None,
-                 lower_limit: Callable = None,
+                 upper_limit: Callable | None = None,
+                 lower_limit: Callable | None = None,
                  weight: float = 1,
                  f_norm: float | PNorm = 4):
         self.fs = np.linspace(fmin,fmax,nF)
@@ -346,7 +348,7 @@ class Optimiser:
         """
         self.requirements.append(req)
 
-    def add_freqlevel(self,
+    def add_splimit(self,
                         fmin: float,
                         fmax: float,
                         nF: int,
