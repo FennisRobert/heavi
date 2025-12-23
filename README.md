@@ -28,10 +28,10 @@ Optionally, its easier to just download the
 Here is an example that demonstrates building a simple two-port circuit with a 4th-order bandpass filter, running S-parameter analysis, and plotting the results.
 
 ```python
-import heavi as hf
+import heavi as hv
 from heavi.lib import smd
 # Create a new circuit model
-model = hf.Model()
+model = hv.Model()
 
 # Define circuit nodes and terminals
 n1 = model.node()
@@ -41,21 +41,21 @@ n3 = model.node()
 p2 = model.new_port(50, n3)  # Terminal 2 with 50-ohm impedance
 
 # Add a resistor between nodes n2 and n3
-resistor = smd.SMDResistor(5, hf.lib.smd.SMDResistorSize.R0402).connect(n2, n3)
+resistor = smd.SMDResistor(5, hv.lib.smd.SMDResistorSize.R0402).connect(n2, n3)
 
 # Add a 4th-order bandpass filter between ground and node n1, connecting to n2
 model.filters.cauer_filter(
-    model.gnd, n1, n2, 2e9, 70e6, 5, 0.03, hf.FilterType.CHEBYCHEV, type=hf.BandType.BANDPASS
+    model.gnd, n1, n2, 2e9, 70e6, 5, 0.03, hv.FilterType.CHEBYCHEV, type=hv.BandType.BANDPASS
 )
 
 # Define the frequency range for S-parameter analysis
-f = hf.frange(1.8e9, 2.2e9, 2001)
+f = hv.frange(1.8e9, 2.2e9, 2001)
 
 # Perform S-parameter analysis
 S = model.run_sp(f)
 
 # Plot S-parameters
-hf.plot_s_parameters(f, [S.S11, S.S21], labels=["S11", "S21"], linestyles=["-", "-"], colorcycle=[0, 1])
+hv.plot_s_parameters(f, [S.S11, S.S21], labels=["S11", "S21"], linestyles=["-", "-"], colorcycle=[0, 1])
 
 # Print all components in the model
 model.print_components()
@@ -114,7 +114,7 @@ Network(default_name: str = 'Node')
 ### heavi.plot_s_parameters
 The `plot_s_parameters` plot function uses `matplotlib` and offers a convenient means of displaying S-parameters.
 ```python
-plot_s_parameters(frequencies: np.ndarray, S_parameters: list[np.ndarray], labels: list[str], linestyles: list[str], colorcycle: list[int])
+hv.plot_s_parameters(frequencies: np.ndarray, S_parameters: list[np.ndarray], labels: list[str], linestyles: list[str], colorcycle: list[int])
 ```
 Plots S-parameter data.
 
@@ -140,7 +140,7 @@ All possible S-parameters up to a 5-port network are predefined as properties fo
 - **`S12`**: The S12 array data.
 - **`S55`**: The S55 array data.
 
-#### **Key Methods**
+#### **Important Methods**
 Most of the methods mentioned below are defined as `Network` methods.
 
 - **`S(i: int, j: int) -> np.ndarray`**
@@ -154,10 +154,10 @@ For more advanced usage, refer to the inline documentation in the `heavi` packag
 
 ## Visualization
 
-The `hf.plot_s_parameters()` function provides an easy way to visualize S-parameter data:
+The `hv.plot_s_parameters()` function provides an easy way to visualize S-parameter data:
 
 ```python
-hf.plot_s_parameters(frequencies, [S11, S21], labels=["S11", "S21"], linestyles=["-", "--"], colorcycle=[0, 1])
+hv.plot_s_parameters(frequencies, [S11, S21], labels=["S11", "S21"], linestyles=["-", "--"], colorcycle=[0, 1])
 ```
 
 - **`frequencies`**: Frequency range (Hz).
@@ -169,6 +169,7 @@ hf.plot_s_parameters(frequencies, [S11, S21], labels=["S11", "S21"], linestyles=
 ---
 ## Features
 
+- Touchstone import
 - Stochastic components and system modeling. 
 - Most common components, impedance, admittance, port, capacitor, inductor, transmission line and N-port S-parameters.
 - BaseCompont class for custom library creation
@@ -177,7 +178,6 @@ hf.plot_s_parameters(frequencies, [S11, S21], labels=["S11", "S21"], linestyles=
 
 ## Future features
 
-- Touchstone import
 - Advanced PCB Router
 - Larger library of components and predefined interfaces/functions
 - Support for nonlinear components (e.g., transistors, diodes).
@@ -188,7 +188,7 @@ hf.plot_s_parameters(frequencies, [S11, S21], labels=["S11", "S21"], linestyles=
 
 ## Contributing
 
-Contributing options come later. Please reach out via my website: www.emerge-tools.org
+Contributing options come later. Please reach out via my website: www.emerge-software.com
 
 ---
 
