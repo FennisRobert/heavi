@@ -29,19 +29,19 @@ Here is an example that demonstrates building a simple two-port circuit with a 4
 
 ```python
 import heavi as hf
-
+from heavi.lib import smd
 # Create a new circuit model
 model = hf.Model()
 
 # Define circuit nodes and terminals
 n1 = model.node()
-p1 = model.terminal(n1, 50)  # Terminal 1 with 50-ohm impedance
+p1 = model.new_port(50, n1)  # Terminal 1 with 50-ohm impedance
 n2 = model.node()
 n3 = model.node()
-p2 = model.terminal(n3, 50)  # Terminal 2 with 50-ohm impedance
+p2 = model.new_port(50, n3)  # Terminal 2 with 50-ohm impedance
 
 # Add a resistor between nodes n2 and n3
-resistor = hf.lib.smd.SMDResistor(5, hf.lib.smd.SMDResistorSize.R0402).connect(n2, n3)
+resistor = smd.SMDResistor(5, hf.lib.smd.SMDResistorSize.R0402).connect(n2, n3)
 
 # Add a 4th-order bandpass filter between ground and node n1, connecting to n2
 model.filters.cauer_filter(
@@ -52,7 +52,7 @@ model.filters.cauer_filter(
 f = hf.frange(1.8e9, 2.2e9, 2001)
 
 # Perform S-parameter analysis
-S = model.run(f)
+S = model.run_sp(f)
 
 # Plot S-parameters
 hf.plot_s_parameters(f, [S.S11, S.S21], labels=["S11", "S21"], linestyles=["-", "-"], colorcycle=[0, 1])
@@ -70,11 +70,10 @@ The `Model` class is the central interface for building and simulating circuits.
 
 #### **Initialization**
 ```python
-Model(default_name: str = "Node", filter_library: Filtering = Filtering, component_library: Library = Library)
+Model(default_name: str = "Node", filter_library: Filtering = Filtering)
 ```
 - **`default_name`**: Default prefix for node names.
 - **`filter_library`**: Library for filter definitions.
-- **`component_library`**: Library for circuit components.
 
 #### **Key Methods**
 Most of the methods mentioned below are defined as `Network` methods.
@@ -82,7 +81,7 @@ Most of the methods mentioned below are defined as `Network` methods.
 - **`node(name: str = None) -> Node`**
   Creates a new circuit node.
 
-- **`terminal(signal_node: Node, Z0: float, gnd_node: Node = None) -> Terminal`**
+- **`new_port(signal_node: Node, Z0: float, gnd_node: Node = None) -> Port`**
   Adds a terminal to the circuit with a specified impedance.
 
 - **`resistor(node1: Node, node2: Node, R: float) -> Component`**
