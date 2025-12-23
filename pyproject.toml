@@ -3,7 +3,7 @@ allow-direct-references = true
 
 [project]
 name = "heavi"
-version = "0.7.8"
+version = "0.7.9"
 description = "An RF circuit simulator"
 authors = [
     {name = "Robert Fennis"}
