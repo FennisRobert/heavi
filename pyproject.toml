@@ -20,6 +20,7 @@ dependencies = [
     "numba-progress>=1.1.0",
     "scipy>=1.14.1",
     "schemdraw>=0.19",
+    "emsutil>=0.1.4",
 ]
 
 [build-system]

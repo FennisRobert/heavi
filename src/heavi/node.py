@@ -15,7 +15,7 @@
 # -------------------------------------------
 
 from __future__ import annotations
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any
 
 #  __             __   __   ___  __  
@@ -43,7 +43,7 @@ UNASSIGNED = UnassignedType()
 class Node:
     """ Node class for the Network object. """
     name: str
-    _index: int = UNASSIGNED
+    _index: int = field(default=UNASSIGNED)
     _parent: Any = None
     _linked: Node = None
     _gnd: bool = False

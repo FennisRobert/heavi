@@ -85,6 +85,20 @@ wheels = [
 ]
 
 [[package]]
+name = "emsutil"
+version = "0.1.4"
+source = { registry = "https://pypi.org/simple/" }
+dependencies = [
+    { name = "matplotlib" },
+    { name = "numpy" },
+    { name = "scipy" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/80/57/2afc7d178370eb82a40b14c2c95d852bca73f263185b59d8e98871dccf20/emsutil-0.1.4.tar.gz", hash = "sha256:62e667bde9294955f6a802554c7e49e06729ef7899df723adc7d3c5668a7101d", size = 83640, upload-time = "2025-12-22T21:00:36.319Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/d1/70/7aebd8019cfe8ef91eba1d5e814e7930ee02f227f520d9652b7f102ba696/emsutil-0.1.4-py3-none-any.whl", hash = "sha256:cc64b459d9d379ccef8a67d2f48c9b8a008129a401a1afb7ed122ba9f4a8c579", size = 24423, upload-time = "2025-12-22T21:00:35.118Z" },
+]
+
+[[package]]
 name = "fonttools"
 version = "4.55.3"
 source = { registry = "https://pypi.org/simple/" }
@@ -130,6 +144,7 @@ name = "heavi"
 version = "0.7.7"
 source = { editable = "." }
 dependencies = [
+    { name = "emsutil" },
     { name = "loguru" },
     { name = "matplotlib" },
     { name = "numba" },
@@ -142,6 +157,7 @@ dependencies = [
 
 [package.metadata]
 requires-dist = [
+    { name = "emsutil", specifier = ">=0.1.4" },
     { name = "loguru", specifier = ">=0.7.3,<0.8.0" },
     { name = "matplotlib", specifier = ">=3.8.0" },
     { name = "numba", specifier = ">=0.57.0" },
