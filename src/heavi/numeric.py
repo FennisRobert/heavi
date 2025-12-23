@@ -537,7 +537,14 @@ def enforce_simparam(value: float | SimParam | Callable, inverse: bool = False, 
         return Scalar(value, unit=unit)
     else:
         raise ValueError(f"Invalid value type: {type(value)}")
-    
+
+def enforce_value(value: float | SimParam) -> float | complex:
+    if isinstance(value, SimParam):
+        return value.value
+    elif isinstance(value, Callable):
+        return value(0)
+    else:
+        return float(value)  
 
 def ensure_simparam(func):
     # Get the function signature

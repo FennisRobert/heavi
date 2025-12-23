@@ -1,7 +1,7 @@
 import numpy as np
 from typing import List, Callable, Tuple, Literal
 from ..node import Node, MatSource
-from ..numeric import SimParam, enforce_simparam
+from ..numeric import SimParam, enforce_simparam, enforce_value
 from enum import Enum
 
 _TWO_MAT = np.array([[1.0,-1.0],[-1.0,1.0]])
@@ -43,7 +43,7 @@ def _format_value_units(value: float, unit: str) -> str:
     '4.53 kHz'
     """
     
-    v, p = _get_power(value)
+    v, p = _get_power(enforce_value(value))
     return f"{v:.2f} {TEN_POWERS[p]}{unit}"
 
 class BaseComponent:

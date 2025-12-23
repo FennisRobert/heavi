@@ -9,7 +9,7 @@ class Capacitor(BaseComponent):
                                                    SimulationType.SP,
                                                    SimulationType.TRANS]
     
-    def __init__(self, node1: Node, node2: Node, capacitance: float):
+    def __init__(self, node1: Node, node2: Node, capacitance: float | SimParam):
         super().__init__()
         self.nodes = [node1, node2]
         self.nterminals = 2

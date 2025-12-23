@@ -32,12 +32,12 @@ class Resistor(BaseComponent):
                                                    SimulationType.SP,
                                                    SimulationType.TRANS]
     
-    def __init__(self, node1: Node, node2: Node, resistance: float):
+    def __init__(self, node1: Node, node2: Node, resistance: float | SimParam):
         super().__init__()
         self.nodes = [node1, node2]
         self.nterminals = 2
-        self.G: SimParam = enforce_simparam(lambda f: 1/resistance)
         self.R: SimParam = enforce_simparam(resistance)
+        self.G: SimParam = enforce_simparam(lambda f: 1/self.R(f))
         
         self.component_name = 'Resistor'
         self.unit = 'Ohm'

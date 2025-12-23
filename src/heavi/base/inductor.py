@@ -10,7 +10,7 @@ class Inductor(BaseComponent):
                                                    SimulationType.TRANS]
     
     TRANS_sources = 1
-    def __init__(self, node1: Node, node2: Node, inductance: float):
+    def __init__(self, node1: Node, node2: Node, inductance: SimParam):
         super().__init__()
         self.nodes = [node1, node2]
         self.nterminals = 2

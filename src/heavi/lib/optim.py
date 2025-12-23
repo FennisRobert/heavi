@@ -191,8 +191,9 @@ class FrequencyLevel(Requirement):
                  fmax: float,
                  nF: int,
                  sparam: tuple[int, int],
-                 upper_limit: Callable | None = None,
-                 lower_limit: Callable | None = None,
+                 upper_limit: float | None = None,
+                 lower_limit: float | None = None,
+                 norm: float = 2.0,
                  weight: float = 1,
                  f_norm: float | PNorm = 4):
         self.fs = np.linspace(fmin,fmax,nF)
@@ -200,15 +201,22 @@ class FrequencyLevel(Requirement):
         self.slc: slice = None
         self.weight: float = weight
 
-        self.upper_limit: Callable = upper_limit
-        self.lower_limit: Callable = lower_limit
-
+        self.upper_limit_value: float | None = upper_limit
+        self.lower_limit_value: float | None = lower_limit
+        
+        self.upper_limit: Callable | None = None
+        self.lower_limit: Callable | None = None
+        
         if upper_limit is not None and lower_limit is not None:
-            self.metric = lambda S: upper_limit(S) + lower_limit(S)
+            self.upper_limit = dBbelow(self.upper_limit_value, norm)
+            self.lower_limit = dBabove(self.lower_limit_value, norm)
+            self.metric = lambda S: self.upper_limit(S) + self.lower_limit(S)
         elif upper_limit is not None:
-            self.metric = upper_limit
+            self.upper_limit = dBbelow(self.upper_limit_value, norm)
+            self.metric = self.upper_limit
         elif lower_limit is not None:
-            self.metric = lower_limit
+            self.lower_limit = dBabove(self.lower_limit_value, norm)
+            self.metric = self.lower_limit
         else:
             raise ValueError("At least one of upper_limit or lower_limit must be specified")
         
@@ -218,8 +226,8 @@ class FrequencyLevel(Requirement):
         return value
     
     def generate_fill_area(self) -> tuple[float, float, float, float]:
-        lower = self.lower_limit
-        upper = self.upper_limit
+        lower = self.lower_limit_value
+        upper = self.upper_limit_value
         if lower is None:
             lower = 0
         if upper is None:
@@ -246,6 +254,7 @@ class Optimiser:
     @property
     def spec_area(self) -> list[tuple[float, float, float, float]]:
         """ Get the fill areas for the requirements."""
+        print([req.generate_fill_area() for req in self.requirements])
         return [req.generate_fill_area() for req in self.requirements]
     
     @property
@@ -353,8 +362,9 @@ class Optimiser:
                         fmax: float,
                         nF: int,
                         sparam: tuple[int, int],
-                        upper_limit: Callable = None,
-                        lower_limit: Callable = None,
+                        upper_limit: float | None = None,
+                        lower_limit: float | None = None,
+                        norm: float = 2.0,
                         weight: float = 1,
                         f_norm: float | PNorm = 4):
             """ Add a frequency level requirement to the optimiser.
@@ -380,7 +390,7 @@ class Optimiser:
             f_norm : float | PNorm, optional
                 The norm to use in the requirement. If not specified, the P2 norm is used.
             """
-            req = FrequencyLevel(fmin, fmax, nF, sparam, upper_limit=upper_limit, lower_limit=lower_limit, weight=weight, f_norm=f_norm)
+            req = FrequencyLevel(fmin, fmax, nF, sparam, upper_limit=upper_limit, lower_limit=lower_limit, norm=norm, weight=weight, f_norm=f_norm)
             self.add_requirement(req)
 
     def generate_objective(self, 
